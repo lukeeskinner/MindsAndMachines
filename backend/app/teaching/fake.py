@@ -27,7 +27,7 @@ class FakeTutor:
         text = ("\n".join(f"{index}. {part}" for index, part in enumerate(paragraphs, 1))
                 if prefs.step_by_step else "\n\n".join(paragraphs))
         fallback = assessment.outcome == "unclear"
-        if fallback:
+        if fallback and decision.kind == "worked_example":
             text = "Let's try another example.\n\n" + text
         return TeachingResult(text=text, next_question_id=decision.next_question_id, fallback=fallback,
                               teaching_source="authored_fallback" if fallback else "authored")
