@@ -1,6 +1,6 @@
 # Minds & Machines — deterministic learning lab
 
-**G1 is implemented on `codex/baseline` and ready for review.** It is a local, two-question demo with four independently replaceable fakes. No real agents, model/provider calls, AWS integration, mathematical updates, policy scoring, authentication or persistence are implemented. G2 is not authorized.
+**G1 is implemented on `codex/baseline` and ready for review.** It is a local, two-question demo with four independently replaceable fakes. No real agents, model/provider calls, backend AWS integration, mathematical updates, policy scoring, backend authentication or persistence are implemented. G2 is not authorized.
 
 ## Run locally
 
@@ -21,6 +21,8 @@ make dev
 ```
 
 Open [the learning lab](http://127.0.0.1:5173). FastAPI listens on `127.0.0.1:8000`; Vite proxies `/api` to it. Ctrl-C stops both processes. Both ports must be free. Runtime works offline after setup. Sessions live only in backend memory; browser/backend restart requires a new session.
+
+The browser starts at a frontend-only Amazon Cognito sign-in gate before course setup. Without Cognito env vars it creates a local `sessionStorage` preview session and does not call the backend. To show a real hosted sign-in link, set `VITE_COGNITO_DOMAIN`, `VITE_COGNITO_CLIENT_ID`, and optionally `VITE_COGNITO_REDIRECT_URI`; API contracts and FastAPI state remain unchanged.
 
 Run the small backend suite and frontend typecheck/build:
 

@@ -21,6 +21,7 @@ import fixture from "../../contracts/fixtures/turn_response.json";
 let fetchMock = vi.fn();
 beforeEach(() => {
   window.history.replaceState(null, "", "/");
+  window.sessionStorage.clear();
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   Element.prototype.scrollIntoView = vi.fn();
   fetchMock = vi
@@ -37,14 +38,42 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
+async function signIn() {
+  const user = userEvent.setup({ applyAccept: false });
+  await user.type(screen.getByRole("textbox", { name: "Email" }), "alex@example.com");
+  await user.type(screen.getByLabelText("Password"), "correcthorsebattery");
+  await user.click(screen.getByRole("button", { name: "Continue to setup" }));
+  await screen.findByRole("heading", { name: "Let’s set up your course." });
+  return user;
+}
+
 describe("course onboarding", () => {
-  it("validates required course/date fields, then reviews a local draft without a server request", async () => {
+  it("gates setup and study behind the frontend Cognito sign-in screen", async () => {
+    window.history.replaceState(null, "", "/#/study");
     const user = userEvent.setup();
     render(<RootApp />);
+    expect(
+      screen.getByRole("heading", { name: "Sign in to your study workspace." }),
+    ).toBeTruthy();
+    expect(window.location.hash).toBe("#/study");
+    await user.click(screen.getByRole("button", { name: "Continue to setup" }));
+    expect(screen.getByText("Enter your email.")).toBeTruthy();
+    await user.type(screen.getByRole("textbox", { name: "Email" }), "alex@example.com");
+    await user.type(screen.getByLabelText("Password"), "correcthorsebattery");
+    await user.click(screen.getByRole("button", { name: "Continue to setup" }));
+    await screen.findByRole("heading", { name: "Let’s set up your course." });
+    expect(window.location.hash).toBe("#/setup");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("validates required course/date fields, then reviews a local draft without a server request", async () => {
+    render(<RootApp />);
+    const user = await signIn();
     const course = screen.getByRole("textbox", { name: "Course name" });
     await user.clear(course);
     await user.click(screen.getByRole("button", { name: "Review my setup" }));
@@ -73,8 +102,8 @@ describe("course onboarding", () => {
   });
 
   it("allows a goal with no deadline and preserves edited details after reviewing", async () => {
-    const user = userEvent.setup();
     render(<RootApp />);
+    const user = await signIn();
     await user.click(
       screen.getByRole("radio", { name: /Build understanding/ }),
     );
@@ -94,8 +123,8 @@ describe("course onboarding", () => {
   });
 
   it("supports file selection, useful validation, removal, and drag-and-drop without uploading", async () => {
-    const user = userEvent.setup({ applyAccept: false });
     render(<RootApp />);
+    const user = await signIn();
     const file = new File(["notes"], "lecture.pdf", {
       type: "application/pdf",
       lastModified: 1,
@@ -140,8 +169,8 @@ describe("course onboarding", () => {
   });
 
   it("keeps the draft and practice session when moving between setup and the study desk", async () => {
-    const user = userEvent.setup();
     render(<RootApp />);
+    const user = await signIn();
     const course = screen.getByRole("textbox", { name: "Course name" });
     await user.clear(course);
     await user.type(course, "My AI course");

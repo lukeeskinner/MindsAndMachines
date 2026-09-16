@@ -12,6 +12,7 @@ import {
   LockKeyhole,
   Waypoints,
 } from "lucide-react";
+import { BrandWordmark } from "../brand/Brand";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
@@ -37,10 +38,14 @@ export function Onboarding({
   draft,
   onChange,
   onContinue,
+  onSignOut,
+  signedInEmail,
 }: {
   draft: CourseDraft;
   onChange: (draft: CourseDraft) => void;
   onContinue: () => void;
+  onSignOut?: () => void;
+  signedInEmail?: string;
 }) {
   const [active, setActive] = useState(0);
   const [ready, setReady] = useState(false);
@@ -109,13 +114,7 @@ export function Onboarding({
             className="setup-brand"
             aria-label="Minds and Machines course setup"
           >
-            <span className="setup-brand-mark">
-              <Waypoints size={25} strokeWidth={1.8} />
-            </span>
-            <span>
-              minds &<br />
-              machines<span className="text-teal-dark">.</span>
-            </span>
+            <BrandWordmark />
           </a>
           <div className="setup-rail-title">A SPACE TO MAKE IT CLICK</div>
           <nav aria-label="Course setup progress">
@@ -174,7 +173,9 @@ export function Onboarding({
             </p>
             <div className="local-draft-label">
               <LockKeyhole size={14} />
-              <span>Local draft · no account needed</span>
+              <span>
+                {signedInEmail ? `Signed in · ${signedInEmail}` : "Local draft"}
+              </span>
             </div>
           </div>
         </aside>
@@ -184,14 +185,25 @@ export function Onboarding({
               <span className="size-1.5 rounded-full bg-yellow" />
               {ready ? "SETUP REVIEW" : "COURSE SETUP"}
             </span>
-            <Button
-              variant="ghost"
-              className="text-xs text-muted-foreground"
-              onClick={onContinue}
-            >
-              Open practice demo
-              <ArrowRight size={14} />
-            </Button>
+            <div className="setup-topbar-actions">
+              <Button
+                variant="ghost"
+                className="text-xs text-muted-foreground"
+                onClick={onContinue}
+              >
+                Open practice demo
+                <ArrowRight size={14} />
+              </Button>
+              {onSignOut && (
+                <Button
+                  variant="ghost"
+                  className="text-xs text-muted-foreground"
+                  onClick={onSignOut}
+                >
+                  Sign out
+                </Button>
+              )}
+            </div>
           </header>
           <div className="setup-content">
             {ready ? (

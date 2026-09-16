@@ -69,11 +69,17 @@
   .local-draft-label {
     @apply mt-7 flex items-center gap-2 border-t border-border pt-5 text-xs leading-5 text-muted-foreground;
   }
+  .local-draft-label span {
+    @apply min-w-0 truncate;
+  }
   .setup-main {
     @apply flex min-w-0 flex-col;
   }
   .setup-topbar {
     @apply mx-10 flex min-h-19 items-center justify-between gap-3 border-b border-border;
+  }
+  .setup-topbar-actions {
+    @apply flex items-center justify-end gap-2;
   }
   .setup-content {
     @apply mx-auto w-full max-w-[800px] px-10 pb-9 pt-10;
@@ -354,6 +360,9 @@
     }
     .setup-topbar {
       @apply mx-5 gap-2;
+    }
+    .setup-topbar-actions {
+      @apply flex-wrap;
     }
     .setup-topbar .button {
       @apply px-1 text-xs;
