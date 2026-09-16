@@ -1,0 +1,162 @@
+# Standalone course ingestion
+
+This module processes PDF/PPTX into an immutable **server-only** course artifact.
+It is deliberately not connected to the API, Coordinator, runtime catalog,
+Assessor, learner, policy, Tutor, storage, or frontend. No shared contracts change.
+
+From the repository root, using Python 3.12 or 3.13:
+
+```sh
+python3 -m backend.app.ingestion --title 'Graph search' --mode local \
+  backend/tests/ingestion/fixtures/course.pdf \
+  backend/tests/ingestion/fixtures/course.pptx > /tmp/processed-course.json
+python3 -m unittest discover -s backend/tests/ingestion -v
+```
+
+The output file includes answers and source excerpts: do not serve it directly to
+the browser or commit uploaded material/student data. CLI errors go to stderr with
+a nonzero exit code and no partial JSON on stdout. For extraction diagnostics,
+use the functions below; `IngestionError.materials` preserves extraction records
+when generation or input-quality checks fail after extraction.
+
+```python
+from backend.app.ingestion import extract_material, process_course
+
+source = extract_material('lecture5.pdf')
+# In an async function; use asyncio.run(...) from a synchronous script.
+course = await process_course(
+    ['lecture5.pdf', 'lecture6.pptx'], title='Intro AI', mode='local'
+)
+server_data = course.to_dict()
+public_question = course.questions[0].public()
+```
+
+## Extraction and dependencies
+
+PDF uses `pdfinfo` to count pages and `pdftotext` once per page, with UTF-8 output
+and a 15-second timeout per subprocess. Both executables must be on PATH. Poppler
+25.09.1 was already installed in the development environment; no package was
+installed and no pyproject/lockfile was changed. **Poppler is a system prerequisite
+not provisioned by `make setup`**. Missing executables raise an actionable error;
+the module never installs anything or substitutes fake text. A deployment or
+developer machine without Poppler needs a separately approved dependency/setup
+decision. Extraction-only PPTX and local generation need only the standard library.
+
+PPTX reads slide order through `ppt/presentation.xml` and its relationships,
+then gathers DrawingML paragraph text from shapes/tables. Slide filename order
+does not establish slide numbers. It does not extract the ZIP to disk, resolve
+external relationships, execute embedded objects, or expand XML entities.
+Speaker notes, master/layout text, diagrams without text, images, and OCR are out
+of scope. PDF columns, formulas, and complex reading order may extract imperfectly.
+
+Every page/slide has its original extraction text, whitespace-normalized text,
+one-based location, stable chunk ID, and `extracted`, `empty`, or `unreadable`
+status. Blank and image-only pages are `empty` (not an assertion that the visual
+page is blank). A broken slide or PDF page keeps its original number; a document
+whose page/slide structure cannot be read has no fabricated chunks. Poppler page
+warnings are treated conservatively as unreadable. Partial material remains
+available with warnings; no usable text causes an error, never invented content.
+
+Limits: 1–8 files, 20 MB each, 1–100 pages/slides per file, 200,000 extracted
+characters per file, PPTX at most 2,000 archive members/40 MB expanded. Bedrock
+receives at most 24,000 normalized source characters; larger input is rejected
+with a request to split it, rather than silently dropping source content.
+Extraction is synchronous local work even though `process_course` is async for
+the provider seam; future API wiring should move processing off the request loop.
+
+## Internal schema (version 1)
+
+All records are frozen dataclasses and collections are tuples. `to_dict()` gives
+a detached structure that serializes to JSON arrays/objects.
+
+| Record | Fields |
+| --- | --- |
+| ProcessedCourse | `course_id`, `title`, `materials`, `concepts`, `questions`, `metadata` |
+| SourceMaterial | `material_id`, original basename `filename`, `sha256`, `format`, `chunks`, `status`, `issues` |
+| SourceChunk | `chunk_id`, `location_kind` (`page`/`slide`), `number`, original `text`, `normalized_text`, `status` |
+| SourceReference | `chunk_id`, exact normalized-text `quote` |
+| Concept | `concept_id`, `name`, extractive `summary`, `source_refs` |
+| Question | `question_id`, `concept_id`, `prompt`, `choices[{id,text}]`, server-only `answer_key`, `explanation`, `source_refs` |
+| ProcessingMetadata | `schema_version`, `mode` (`local`/`bedrock`), `provider_calls`, `warnings`, `requires_review=true` |
+
+Code alone assigns IDs, filenames, page/slide numbers, and extracted text. Material
+IDs hash the original basename plus source bytes. Chunk IDs hash material ID and
+location. Course IDs hash schema version, title, and sorted material IDs. Concept
+IDs hash course ID, normalized name and sorted source IDs; question IDs hash the
+concept, prompt, choices, answer, and evidence. Identical inputs/results produce
+identical IDs, including across directories; source-byte, filename, title, or
+generated content changes may change IDs. Semantically equivalent but different
+files/model outputs are not promised identical IDs. Duplicate material is rejected.
+
+## Local and Bedrock generation
+
+`fake` and `local` are identical deterministic demo modes. They bypass the provider
+entirely and build two source-recall MCQs for each of up to four distinct readable
+source sections with at least eight words. A source heading supplies the concept
+name where possible. These are honest source-derived fixtures, not a full semantic
+topic detector, calibrated assessment, or unrelated fixed Intro AI demo. Both
+modes run the same validation and record `mode=local`, `provider_calls=0`.
+
+`process_course` follows `MODEL_PROVIDER` when `mode` is omitted, defaulting to
+fake if unset. The CLI deliberately defaults to local even if that environment
+variable is set. Bedrock requires both `mode=bedrock` (or the function's env default)
+and `MODEL_PROVIDER=bedrock`; it reuses `backend.app.agents.provider.complete`
+without changing provider configuration or introducing an adapter. Use the
+existing backend environment and already configured AWS region/model/credentials.
+
+```sh
+MODEL_PROVIDER=bedrock python3 -m backend.app.ingestion \
+  --mode bedrock --title 'Graph search' lecture5.pdf
+```
+
+There is exactly one provider call with a 6,000-token output budget. The existing
+provider deadline/retry policy applies. Generation returns 1–4 concepts and 2–4
+questions each, at most 16 total. No retries, repair calls, provider switching, or
+automatic local fallback occur. Malformed/unsupported output and provider failures
+raise `IngestionError`; callers may explicitly request a separate local run.
+Model output can vary between runs; this branch does not claim Bedrock determinism.
+
+The model receives chunk IDs and normalized text, without filenames or location
+metadata. Strict JSON requires exact keys/types, bounded nonempty lists/text,
+and no duplicate object keys or NaN/Infinity. Extra ID/provenance fields are
+rejected. Concepts require unique names and source-verbatim names/summaries.
+Questions require distinct prompts/choices, an integer answer index, their
+concept name in the prompt, and known nonempty source references. Every quote
+must occur in the cited chunk. Correct answer text and explanation must occur
+in a shared evidence quote from one of the concept's source chunks. Distractors
+appearing verbatim in evidence are rejected as ambiguous for this extractive MVP.
+
+These checks detect some unsupported answers and references; they cannot prove
+that a prompt entails its answer, that distractors are false, that course coverage
+is adequate, or that the source itself is correct. Human review remains required
+before integration. Uploaded instructions remain data, with no tools or agent
+execution available to the generation step.
+
+## Exact later integration boundary
+
+1. A future upload handler supplies controlled local PDF/PPTX paths and a title to
+   `await process_course(paths, title=title, mode=mode) -> ProcessedCourse`; handle
+   `IngestionError` without exposing raw provider exceptions. Upload transport,
+   authentication, file ownership, and persistence are not implemented here.
+2. Persist `course.to_dict()` privately, including source lookup and answer keys.
+   Resolve each reference via `materials[].chunks[].chunk_id` to its filename and
+   page/slide number. IDs/location metadata must continue to come from trusted code.
+3. After content review, the existing server `Question` can be constructed from
+   the local question's `question_id`, `concept_id`, `prompt`, `choices`, and
+   `answer_key`, with `rubric=explanation`. This mapping is a proposed future adapter;
+   no global type or caller was changed. `question.public()` exposes only the
+   existing PublicQuestion-shaped fields and omits source answers/explanations.
+4. Build a course-scoped catalog and policy-eligible teaching/candidate content
+   separately. This artifact does not contain intervention candidates, prerequisites,
+   calibrated difficulty, or reviewed teaching examples. It cannot be dropped into
+   today's demo Catalog/Tutor unchanged. Initialize learner state from accepted
+   concept IDs only; processing/teaching must never raise mastery by itself.
+5. Integrator may add ingestion discovery to `make check`; this branch runs
+   `python3 -m unittest discover -s backend/tests/ingestion -v` separately so the
+   shared Makefile stays unchanged. Run the existing `make check` and `make smoke`
+   alongside that command before integration.
+
+Fixtures are synthetic, authored specifically for tests. The PDF has compressed
+text on pages 1 and 3 plus a blank page 2. The PPTX has readable slides 1 and 3
+plus an empty slide 2. Fixture authoring used already bundled ReportLab/python-pptx;
+neither is an ingestion or test runtime requirement. No live AWS calls run in tests.
