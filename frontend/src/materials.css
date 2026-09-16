@@ -1,0 +1,154 @@
+@layer components {
+  .workspace-with-chat .desk-layout[data-view="materials"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .materials-workspace {
+    padding: 28px;
+    background: var(--surface);
+    border-top: 3px solid var(--teal-dark);
+  }
+  .materials-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: var(--muted-foreground);
+  }
+  .materials-notice svg {
+    flex-shrink: 0;
+    margin-top: 3px;
+    color: var(--teal-dark);
+  }
+  .materials-notice strong {
+    display: block;
+    color: var(--foreground);
+    font-weight: 650;
+  }
+  .materials-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+    gap: 32px;
+    padding-top: 28px;
+  }
+  .materials-library,
+  .materials-goals {
+    min-width: 0;
+  }
+  .materials-goals {
+    padding-left: 28px;
+    border-left: 1px solid var(--border);
+  }
+  .materials-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .materials-section-heading h2 {
+    font-family: "Manrope Variable", sans-serif;
+    font-size: 1.12rem;
+    font-weight: 750;
+    letter-spacing: -0.035em;
+  }
+  .materials-section-heading .eyebrow {
+    margin-bottom: 6px;
+    font-size: 0.64rem;
+  }
+  .materials-intro {
+    margin: 12px 0 20px;
+    font-size: 0.85rem;
+    color: var(--muted-foreground);
+  }
+  .materials-workspace .material-dropzone {
+    padding: 24px 16px;
+    background: var(--background);
+  }
+  .materials-summary {
+    margin: 18px 0 22px;
+  }
+  .materials-summary > div {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .materials-summary dt {
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+  }
+  .materials-summary dd {
+    margin-top: 3px;
+    font-size: 0.9rem;
+    font-weight: 550;
+    overflow-wrap: anywhere;
+  }
+  .materials-editor {
+    display: grid;
+    gap: 18px;
+    margin-top: 24px;
+  }
+  .materials-editor label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 650;
+    margin-bottom: 7px;
+  }
+  .materials-editor .field-error {
+    margin-top: 6px;
+    font-size: 0.78rem;
+    color: #9f1239;
+  }
+  .materials-editor-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .materials-local-note {
+    font-size: 0.75rem;
+    line-height: 1.65;
+    color: var(--muted-foreground);
+  }
+  .materials-save-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 24px;
+    margin-top: 12px;
+    color: var(--teal-dark);
+    font-size: 0.78rem;
+  }
+  @media (max-width: 1000px) {
+    .materials-columns {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+    }
+    .materials-goals {
+      padding: 24px 0 0;
+      border-left: 0;
+      border-top: 1px solid var(--border);
+    }
+    .materials-summary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: 24px;
+    }
+  }
+  @media (max-width: 560px) {
+    .materials-workspace {
+      padding: 20px 16px;
+    }
+    .materials-section-heading {
+      flex-wrap: wrap;
+    }
+    .materials-summary {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .workspace-with-chat .navigation-list .nav-item {
+      padding-inline: 3px;
+      white-space: normal;
+      text-align: center;
+      line-height: 1.3;
+    }
+  }
+}
