@@ -1,5 +1,8 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  server: { proxy: { '/api': 'http://127.0.0.1:8000' } },
+  resolve: { alias: { "@": new URL("./src", import.meta.url).pathname } },
+  plugins: [tailwindcss()],
+  server: { proxy: { "/api": "http://127.0.0.1:8000" } },
 });
