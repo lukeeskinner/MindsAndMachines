@@ -23,7 +23,8 @@ The recommendation is based on local/cloud parity and this team's constraints, n
 | Cognito | Adopted: the team decided real per-user accounts/login are a genuine product requirement, not just a demo-access gate | User Pool + App Client (Hosted UI, Authorization Code + PKCE, no client secret in the SPA); backend verifies the Cognito ID token's signature/claims via JWKS | User Pool created via AWS CLI runbook (docs/AWS.md below); backend/app/auth/cognito.py verifies tokens; anonymous session_id remains the fallback when no token is presented, so G1's dummy loop is unaffected |
 | Bedrock Agents / AgentCore | Potential managed orchestration/hosting capabilities | Another lifecycle and execution model before the core loop is proven | Defer; bounded Python coordinator with provider calls is sufficient |
 | S3 / Bedrock Knowledge Bases / vector storage | Useful for large document collections and retrieval | No need with a tiny authored bank; ingestion/retrieval creates another failure surface | Defer; versioned local content files |
-| DynamoDB / RDS / ElastiCache | Would support later multi-instance persistence/caching | Adds local emulation, credentials and storage rewrites | Defer; SQLite at hackathon scale |
+| DynamoDB | Adopted: real persistence for session/learner state so data survives a backend restart, tied to the Cognito user when signed in | One table, partition key `session_id`, on-demand billing; `backend/app/storage/dynamo.py` implements the same three-method seam as MemoryStore | Table created via AWS CLI runbook below; selected only when `DYNAMODB_TABLE_NAME` is set, so the in-memory default is unchanged when unconfigured |
+| RDS / ElastiCache | Would support later multi-instance persistence/caching | Adds local emulation, credentials and storage rewrites | Defer; DynamoDB covers the hackathon's persistence need |
 | Lambda / API Gateway / Step Functions / ECS / EKS | Useful in other hosting patterns | Multiple deployment concepts with little visible demo benefit here | Defer; one process/container |
 
 EBS is persistent block storage, but deleting/terminating resources can still delete a volume depending on configuration; it is not a backup strategy. Verify lifecycle settings and export the synthetic demo state before teardown. [AWS EBS documentation](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/storage_ebs.html).
@@ -55,6 +56,7 @@ Planned configuration, to be implemented after approval:
 | `TURN_TIMEOUT_SECONDS`, `MAX_MODEL_CALLS` | Default planned caps of 20 seconds and four calls |
 | `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID` | Enables backend ID-token verification when both are set; unset means anonymous-only, matching the original G1 session model |
 | `COGNITO_DOMAIN` | The User Pool's Hosted UI domain; used by the frontend to build the login redirect URL |
+| `DYNAMODB_TABLE_NAME` | Enables DynamoDB-backed session persistence when set; unset means in-memory only, matching the original G1 storage seam |
 
 ### Cognito setup runbook (run by a human, not the coding agent)
 
@@ -81,6 +83,18 @@ aws cognito-idp create-user-pool-domain --domain minds-and-machines-<unique-suff
 ```
 
 Record the pool ID, app client ID and domain as `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID` and `COGNITO_DOMAIN`. Verify the Workshop Studio participant role actually permits `cognito-idp:Create*` before running this; if it does not, request a scoped exception rather than switching credentials.
+
+### DynamoDB table runbook (also run by a human)
+
+```sh
+aws dynamodb create-table --table-name minds-and-machines-sessions \
+  --attribute-definitions AttributeName=session_id,AttributeType=S \
+  --key-schema AttributeName=session_id,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1
+```
+
+Set `DYNAMODB_TABLE_NAME=minds-and-machines-sessions` before starting the backend. On-demand billing means no cost while idle and no capacity planning for a hackathon's traffic.
 
 Do not automatically switch Bedrock to OpenAI on a failed request. That hides the provider in the demo and may send answers to a different provider unexpectedly. Use a curated response with a degraded indicator; an operator can explicitly choose OpenAI for a later session. Record the actual provider/model per call. Never say a fallback run satisfies an unverified AWS judging rule.
 

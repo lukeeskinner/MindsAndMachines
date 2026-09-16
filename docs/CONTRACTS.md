@@ -70,6 +70,8 @@ Unknown session/question/choice or malformed input may use a simple 400/404/422 
 
 Keep `session_id -> {question_id, learner_state, history}` in API-owned memory. State access goes through small `new_session`, `load_session` and `save_session` helpers in `backend/app/storage/`; no repository framework, transaction abstraction or persistence protocol. SQLite can replace these helpers when useful without changing the four module callers. No persistence/restart promise in G1.
 
+Post-G1, `backend/app/storage/dynamo.py` implements the same three helpers against a DynamoDB table (one item per session, partition key `session_id`), selected in `main.py` only when `DYNAMODB_TABLE_NAME` is set. Unset, `main.py` keeps using `MemoryStore` exactly as in G1 — the callers (coordinator, routes) never change either way.
+
 Use one fixed fallback teaching response for unclear input and set `fallback=true`. Do not build provider or storage failure simulators. In G2/G3, actual provider timeouts should take a bounded, visible curated fallback; avoid silently sending a failed Bedrock request to OpenAI.
 
 ## Provider boundary — after G1

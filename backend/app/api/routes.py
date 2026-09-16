@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Header, HTTPException
 from backend.app.agents.coordinator import Coordinator
 from backend.app.auth.cognito import AuthError, cognito_enabled, verify_id_token
+from backend.app.storage.dynamo import DynamoStore
 from backend.app.storage.memory import MemoryStore, Session
 from backend.app.teaching.catalog import Catalog
 from contracts.models import HistoryEntry, SessionResponse, TurnRequest, TurnResponse
 
 
-def router_for(coordinator: Coordinator, store: MemoryStore, catalog: Catalog) -> APIRouter:
+def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catalog: Catalog) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
 
     @router.post("/sessions", response_model=SessionResponse, status_code=201)
