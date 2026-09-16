@@ -372,9 +372,9 @@ export function App({
             </div>
             <div className="demo-label">
               <span />
-              Deterministic demo
+              Adaptive learning demo
             </div>
-            <p className="rail-footnote">Two questions. No live AI.</p>
+            <p className="rail-footnote">Two questions. Teaching source shown per response.</p>
           </div>
         </aside>
         <div className="app-main">
@@ -1128,7 +1128,7 @@ export function App({
                 MINDS & MACHINES <span className="footer-divider">/</span>{" "}
                 LEARNING LAB
               </span>
-              <span>Deterministic demo · no live AI</span>
+              <span>Teaching source shown with each response</span>
             </footer>
           </main>
         </div>

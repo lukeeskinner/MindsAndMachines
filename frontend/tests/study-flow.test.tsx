@@ -72,6 +72,30 @@ async function start() {
 }
 
 describe("study desk interactions", () => {
+  it.each([
+    ["authored", false, "dummy", "fake", "Authored teaching"],
+    ["bedrock", false, "live", "bedrock", "AI-generated teaching"],
+    ["authored_fallback", true, "dummy", "fake", "Reviewed fallback"],
+  ])("renders explicit %s provenance across existing views", async (source, fallback, mode, provider, label) => {
+    fetchMock.mockResolvedValueOnce(respond({
+      ...fixture, mode, provider,
+      tutor: { ...fixture.tutor, fallback, teaching_source: source },
+    }));
+    const user = await start();
+    expect(screen.queryByText(/No live AI/i)).toBeNull();
+    await user.click(screen.getByRole("radio", { name: firstQuestion.choices[0].text }));
+    await user.click(screen.getByRole("button", { name: "Check answer" }));
+    await screen.findByRole("region", { name: "What changed?" });
+    const desk = screen.getByRole("tabpanel", { name: "Study desk" });
+    expect(within(desk).getByText(label)).toBeTruthy();
+    if (source !== "bedrock") expect(within(desk).queryByText("AI-generated teaching")).toBeNull();
+    await user.click(screen.getByRole("tab", { name: "Home", exact: true }));
+    expect(within(screen.getByRole("region", { name: "Learning overview" })).getByText(label)).toBeTruthy();
+    await user.click(screen.getByRole("tab", { name: "Chatbot", exact: true }));
+    expect(within(screen.getByRole("region", { name: "Study conversation" })).getByText(label)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps the real request shape, stages feedback before the next question, and completes the loop", async () => {
     fetchMock
       .mockResolvedValueOnce(respond(fixture))
@@ -415,7 +439,7 @@ describe("adaptive evidence and trust", () => {
     expect(
       within(home).getByRole("heading", { name: "Worked example" }),
     ).toBeTruthy();
-    expect(within(home).getByText("Deterministic teaching")).toBeTruthy();
+    expect(within(home).getByText("Authored teaching")).toBeTruthy();
     const why = within(home).getByRole("button", { name: "Why this next?" });
     why.focus();
     await user.keyboard("{Enter}");
@@ -464,7 +488,7 @@ describe("adaptive evidence and trust", () => {
     ).toBeTruthy();
     expect(
       within(screen.getByRole("tabpanel", { name: "Study desk" })).getByText(
-        "Deterministic teaching",
+        "Authored teaching",
       ),
     ).toBeTruthy();
     expect(document.activeElement).toBe(
@@ -551,7 +575,7 @@ describe("adaptive evidence and trust", () => {
       within(conversation).getByText("Marked fallback teaching"),
     ).toBeTruthy();
     expect(
-      within(conversation).queryByText("Deterministic teaching"),
+      within(conversation).queryByText("Authored teaching"),
     ).toBeNull();
     expect(within(conversation).queryByText(/live.*generated/i)).toBeNull();
     expect(within(conversation).queryByText(/reviewed fallback/i)).toBeNull();

@@ -46,6 +46,7 @@ class TutorTests(unittest.IsolatedAsyncioTestCase):
     async def assert_fallback(self):
         result = await self.teach()
         self.assertTrue(result.fallback)
+        self.assertEqual(result.teaching_source, "authored_fallback")
         self.assertEqual(result.text, (await self.reviewed()).text)
         self.assertEqual(result.next_question_id, self.decision.next_question_id)
         return result
@@ -84,6 +85,7 @@ class TutorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.text, self.generated)
         self.assertFalse(result.fallback)
         self.assertEqual(result.next_question_id, "relationship-q02")
+        self.assertEqual(result.teaching_source, "bedrock")
         self.assertEqual(self.complete.call_args.kwargs["max_tokens"], 512)
 
     async def assert_generated(self, text):

@@ -1,13 +1,26 @@
 """Provider adapter seam: one normalized complete(...) call for fake/Bedrock.
 
-Assessment and Teaching call this instead of importing provider SDKs directly
-(AWS.md "Provider seam"; CONTRACTS.md "Provider boundary"). Not wired into the
-G1 composition root; FakeAssessor/FakeLearner/FakePolicy/FakeTutor remain the
-default in backend/app/main.py until G2 wiring is authorized.
+Teaching calls this instead of importing provider SDKs directly. Fake mode stays
+local; Bedrock runs in a worker thread with a bounded caller deadline.
 """
+import asyncio
+import math
+import logging
 import os
 import time
 from dataclasses import dataclass
+
+
+logger = logging.getLogger("uvicorn.error.provider")
+
+
+def log_configuration(event: str) -> None:
+    # Only these non-secret configuration fields are diagnostic output. Never
+    # dump the environment, SDK exceptions, request/response bodies or headers.
+    logger.info("%s pid=%s configured_provider=%r configured_model=%r region=%r timeout_seconds=%r",
+                event, os.getpid(), os.environ.get("MODEL_PROVIDER", "fake"),
+                os.environ.get("BEDROCK_MODEL_ID"), os.environ.get("AWS_REGION"),
+                os.environ.get("BEDROCK_TIMEOUT_SECONDS", "12"))
 
 
 @dataclass
@@ -28,6 +41,7 @@ async def complete(prompt: str, *, system: str | None = None, max_tokens: int = 
     if provider == "fake":
         return _complete_fake(prompt)
     if provider == "bedrock":
+        log_configuration("provider_attempt")
         return await _complete_bedrock(prompt, system=system, max_tokens=max_tokens)
     raise ProviderError(f"Unsupported MODEL_PROVIDER: {provider!r}")
 
@@ -37,11 +51,56 @@ def _complete_fake(prompt: str) -> ProviderResult:
 
 
 async def _complete_bedrock(prompt: str, *, system: str | None, max_tokens: int) -> ProviderResult:
-    import boto3  # local import: fake mode never needs boto3 installed
+    try:
+        timeout = float(os.environ.get("BEDROCK_TIMEOUT_SECONDS", "12"))
+        if not math.isfinite(timeout) or not 0 < timeout <= 15:
+            raise ValueError("timeout outside interactive budget")
+        region = os.environ["AWS_REGION"]
+        model_id = os.environ["BEDROCK_MODEL_ID"]
+    except (ValueError, KeyError) as exc:
+        logger.warning("provider_failed reason=configuration_error")
+        raise ProviderError("Bedrock requires region, model and a timeout in (0, 15] seconds") from exc
+    try:
+        result = await asyncio.wait_for(asyncio.to_thread(
+            _converse, prompt, system=system, max_tokens=max_tokens,
+            region=region, model_id=model_id, timeout=timeout,
+        ), timeout=timeout)
+        logger.info("provider_returned provider=bedrock latency_ms=%.1f", result.latency_ms)
+        return result
+    except TimeoutError as exc:
+        # Cancellation cannot kill an SDK thread. Its eventual result is ignored;
+        # socket deadlines and disabled SDK retries also bound ordinary I/O.
+        logger.warning("provider_failed reason=timeout")
+        raise ProviderError("Bedrock request timed out") from exc
+    except Exception as exc:
+        # SDK error messages can contain request data. Log only fixed categories.
+        from botocore.exceptions import ClientError, ConnectTimeoutError, NoCredentialsError, ReadTimeoutError
+        reason = "provider_error"
+        if isinstance(exc, (ConnectTimeoutError, ReadTimeoutError)):
+            reason = "timeout"
+        elif isinstance(exc, NoCredentialsError):
+            reason = "credentials_unavailable"
+        elif isinstance(exc, ClientError):
+            code = exc.response.get("Error", {}).get("Code")
+            allowed = {"ExpiredTokenException", "UnrecognizedClientException", "AccessDeniedException",
+                       "ValidationException", "ThrottlingException", "ServiceUnavailableException",
+                       "ModelTimeoutException", "ModelErrorException", "ResourceNotFoundException"}
+            if isinstance(code, str) and code in allowed:
+                reason = code
+        logger.warning("provider_failed reason=%s", reason)
+        raise ProviderError("Bedrock call failed") from exc
 
-    region = os.environ["AWS_REGION"]
-    model_id = os.environ["BEDROCK_MODEL_ID"]
-    client = boto3.client("bedrock-runtime", region_name=region)
+
+def _converse(prompt: str, *, system: str | None, max_tokens: int,
+              region: str, model_id: str, timeout: float) -> ProviderResult:
+    import boto3  # local import: fake mode never needs boto3 installed
+    from botocore.config import Config
+
+    start = time.monotonic()
+    client = boto3.client("bedrock-runtime", region_name=region, config=Config(
+        connect_timeout=min(5.0, timeout), read_timeout=timeout,
+        retries={"total_max_attempts": 1},
+    ))
     kwargs = {
         "modelId": model_id,
         "messages": [{"role": "user", "content": [{"text": prompt}]}],
@@ -49,11 +108,18 @@ async def _complete_bedrock(prompt: str, *, system: str | None, max_tokens: int)
     }
     if system:
         kwargs["system"] = [{"text": system}]
-    start = time.monotonic()
     try:
+        logger.info("bedrock_converse_started")
         response = client.converse(**kwargs)
-    except Exception as exc:  # noqa: BLE001 - normalized into ProviderError for callers
-        raise ProviderError(f"Bedrock call failed: {exc}") from exc
+        stop_reason = response.get("stopReason")
+        allowed_stops = {"end_turn", "max_tokens", "stop_sequence", "tool_use",
+                         "guardrail_intervened", "content_filtered"}
+        logger.info("bedrock_response_received stop_reason=%s",
+                    stop_reason if isinstance(stop_reason, str) and stop_reason in allowed_stops else "unknown")
+        text = response["output"]["message"]["content"][0]["text"]
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("Empty Bedrock text")
+    finally:
+        client.close()
     latency_ms = (time.monotonic() - start) * 1000
-    text = response["output"]["message"]["content"][0]["text"]
     return ProviderResult(text=text, provider="bedrock", model=model_id, latency_ms=latency_ms)

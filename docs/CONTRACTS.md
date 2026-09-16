@@ -4,6 +4,28 @@ Status: G1 types and interfaces are implemented in `contracts/models.py`, `contr
 
 ## Keep representation small
 
+G2 Tutor runtime addition: `TeachingResult` and the public `tutor` object now carry
+`teaching_source: authored | bedrock | authored_fallback` (default `authored` for
+existing local implementations). `bedrock` means generated text passed Tutor
+validation; `authored_fallback` means reviewed catalog prose was used instead,
+including unclear assessment, unsupported provider, provider error/timeout or
+validation failure. `fallback` remains the existing boolean. Completion is
+`authored` with `fallback=false`, even when Bedrock is configured.
+
+The existing top-level `mode` and `provider` describe the **returned teaching**:
+`live/bedrock` only for accepted generation; otherwise `dummy/fake`. They do not
+describe the whole pipeline or record an attempted provider. The assessment
+remains FakeAssessor. The UI uses `tutor.teaching_source`, never prose or server
+configuration, to label Authored teaching, AI-generated teaching or Reviewed
+fallback. Raw model IDs are not added to learner-facing data.
+
+The four callable signatures are unchanged. Coordinator snapshots policy choices
+before Teaching, passes defensive copies, and rejects an unknown trusted next
+question or a mismatching TeachingResult with a controlled integration error.
+These errors return HTTP 500 with a generic configuration message before session
+state/history are saved. Ordinary Tutor provider failures return HTTP 200 with
+reviewed fallback and the trusted Decision/next question; the turn is not retried.
+
 Use simple Python dataclasses or Pydantic models in `contracts/`, one shared example payload, and a small TypeScript type file there if needed. A handwritten Python/TypeScript pair is acceptable at this scale; SWE1 keeps it aligned with the example and the loop check. Type/schema/client generation is optional only when nearly free. FastAPI's built-in OpenAPI output is fine; no extra generation pipeline is required.
 
 Use snake_case JSON keys, stable catalog IDs and finite numbers. The API validates the handful of expected fields. No request/attempt IDs, state versions, catalog/model version envelopes, event log or migration framework in G1. Keep rubrics and answer keys server-side. The following tables describe the G1 records implemented on the review branch.
@@ -21,7 +43,7 @@ Use snake_case JSON keys, stable catalog IDs and finite numbers. The API validat
 | LearnerPresentationPreferences | `plain_language: bool`, `step_by_step: bool`, `concise: bool`; each defaults to false |
 | Candidate | `candidate_id`, `concept_id`, `kind`, `content_id`, `next_question_id` (string or null) |
 | Decision | Candidate fields plus `reason: string` |
-| TeachingResult | `text`, `next_question_id` (string or null), `fallback: bool` |
+| TeachingResult | `text`, `next_question_id` (string or null), `fallback: bool`, `teaching_source` |
 | HistoryEntry | `question_id`, `evidence_applied: bool`, `candidate_id` (string or null) |
 
 `kind` is `diagnostic_probe`, `worked_example` or `socratic_hint`. G1 needs only a worked example and a canned probe/completion. The curriculum hierarchy, sources, prerequisites and richer rubrics remain content metadata for G2; do not create a content database or elaborate catalog schema during G1.
@@ -58,9 +80,9 @@ The answer is a choice ID in G1. Free text can use the same string when supporte
 
 Post-G1, real login is layered on top without breaking that anonymous baseline: `POST /api/v1/sessions` optionally accepts a `Authorization: Bearer <Cognito ID token>` header. When present and Cognito is configured (`COGNITO_USER_POOL_ID`/`COGNITO_APP_CLIENT_ID` set), the backend verifies the token's signature and claims via JWKS and ties the new session to the token's `sub`. When absent, or when Cognito isn't configured, the session stays anonymous exactly as before — this keeps G1's tests and dummy loop unaffected.
 
-Keep the learner's chosen preferences in browser memory and send the current values with each turn. Changes affect the next teaching response; they do not submit/regrade an answer or require a new endpoint. New-session/reset preserves these browser choices; a page reload may restore defaults. No server-side preference persistence is required. Session creation, TurnResponse and TeachingResult shapes are unchanged.
+Keep the learner's chosen preferences in browser memory and send the current values with each turn. Changes affect the next teaching response; they do not submit/regrade an answer or require a new endpoint. New-session/reset preserves these browser choices; a page reload may restore defaults. No server-side preference persistence is required. Session creation is unchanged; teaching provenance is the additive G2 response extension described above.
 
-TurnResponse fields: `session_id`, `assessment` (the outcome, misconception and feedback only), `concepts`, `decision` (candidate ID, concept, kind and reason, or null), `tutor: {text,fallback}`, `next_question: PublicQuestion|null`, `mode` (dummy/live), `provider` (fake/bedrock/openai), and `trace: list[string]`.
+TurnResponse fields: `session_id`, `assessment` (the outcome, misconception and feedback only), `concepts`, `decision` (candidate ID, concept, kind and reason, or null), `tutor: {text,fallback,teaching_source}`, `next_question: PublicQuestion|null`, `mode` (dummy/live), `provider` (fake/bedrock), and `trace: list[string]`.
 
 G1 trace can simply be `['assess','update','select','teach']`. Null next_question means the short activity is complete. The UI renders a fixed completion message and offers reset. The live provider/model and detailed candidate scores can be exposed through a reviewed additive extension in G2; no tracing infrastructure is necessary for G1.
 

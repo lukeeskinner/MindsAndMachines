@@ -36,7 +36,9 @@ def run_demo(preferences):
 
 
 process = subprocess.Popen([sys.executable, "-m", "uvicorn", "backend.app.main:app",
-    "--host", "127.0.0.1", "--port", str(port), "--log-level", "error"])
+    "--host", "127.0.0.1", "--port", str(port), "--log-level", "error"],
+    env={**os.environ, "MODEL_PROVIDER": "fake", "DYNAMODB_TABLE_NAME": "",
+         "COGNITO_USER_POOL_ID": "", "COGNITO_APP_CLIENT_ID": ""})
 try:
     for _ in range(50):
         try:

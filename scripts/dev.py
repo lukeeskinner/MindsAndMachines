@@ -15,7 +15,7 @@ try:
         "--host", "127.0.0.1", "--port", "8000",
     ], start_new_session=True))
     processes.append(subprocess.Popen(["npm", "--prefix", "frontend", "run", "dev"], start_new_session=True))
-    print("Open http://127.0.0.1:5173 — deterministic G1. Ctrl-C stops both servers.", flush=True)
+    print("Open http://127.0.0.1:5173 — teaching source shown per response. Ctrl-C stops both servers.", flush=True)
     while all(process.poll() is None for process in processes):
         time.sleep(0.3)
 except KeyboardInterrupt:
