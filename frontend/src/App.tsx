@@ -14,6 +14,7 @@ import {
   LoaderCircle,
   MessageSquare,
   Network,
+  FolderOpen,
   RotateCcw,
   Terminal,
   Waypoints,
@@ -38,6 +39,8 @@ import {
 import { motion, MotionConfig, useReducedMotion } from "motion/react";
 import { post } from "./lib/api";
 import { StudyChatbot } from "./components/study/StudyChatbot";
+import { MaterialsWorkspace } from "./components/study/MaterialsWorkspace";
+import { initialDraft, type CourseDraft } from "./components/onboarding/model";
 import { EvidenceComparison } from "./components/study/EvidenceComparison";
 import { TeachingPreferences } from "./components/study/TeachingPreferences";
 import {
@@ -147,7 +150,16 @@ function Trace({ result }: { result: TurnResponse }) {
   );
 }
 
-export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
+export function App({
+  onEditSetup,
+  course,
+}: {
+  onEditSetup?: () => void;
+  course?: { draft: CourseDraft; onChange: (draft: CourseDraft) => void };
+} = {}) {
+  const [localDraft, setLocalDraft] = useState(initialDraft);
+  const courseDraft = course?.draft ?? localDraft;
+  const changeCourse = course?.onChange ?? setLocalDraft;
   const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState<PublicQuestion | null>(null);
   const [concepts, setConcepts] = useState<ConceptEstimate[]>([]);
@@ -327,6 +339,14 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                 <span className="nav-count">{entries.length}</span>
               )}
             </TabsTrigger>
+            <TabsTrigger
+              value="materials"
+              className="nav-item"
+              aria-label="Materials"
+            >
+              <FolderOpen size={19} />
+              Materials
+            </TabsTrigger>
           </TabsList>
           <div className="rail-bottom">
             <div className="rail-note">
@@ -382,7 +402,9 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                       ? "Chatbot"
                       : view === "map"
                         ? "See the bigger picture."
-                        : "Follow your thinking."}
+                        : view === "materials"
+                          ? "Your course, in one place."
+                          : "Follow your thinking."}
                 </h1>
                 <p>
                   {view === "study"
@@ -391,26 +413,30 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                       ? "Your study context, answers, and explanations together."
                       : view === "map"
                         ? "Six concepts, with room for uncertainty."
-                        : "Your answers, feedback, and next steps in one place."}
+                        : view === "materials"
+                          ? "Keep your notes and study goals close at hand."
+                          : "Your answers, feedback, and next steps in one place."}
                 </p>
               </div>
-              <div className="session-progress">
-                <span className="progress-caption">
-                  THIS SESSION{" "}
-                  <strong>
-                    {entries.length}
-                    <span> / 2</span>
-                  </strong>
-                </span>
-                <div
-                  className="progress-segments"
-                  aria-label={`${entries.length} of 2 questions answered`}
-                >
-                  <span className={entries.length > 0 ? "filled" : ""} />
-                  <span className={entries.length > 1 ? "filled" : ""} />
+              {view !== "materials" && (
+                <div className="session-progress">
+                  <span className="progress-caption">
+                    THIS SESSION{" "}
+                    <strong>
+                      {entries.length}
+                      <span> / 2</span>
+                    </strong>
+                  </span>
+                  <div
+                    className="progress-segments"
+                    aria-label={`${entries.length} of 2 questions answered`}
+                  >
+                    <span className={entries.length > 0 ? "filled" : ""} />
+                    <span className={entries.length > 1 ? "filled" : ""} />
+                  </div>
+                  <span className="progress-note">questions answered</span>
                 </div>
-                <span className="progress-note">questions answered</span>
-              </div>
+              )}
             </div>
             {error && (
               <div className="error-banner" role="alert">
@@ -434,6 +460,15 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
             <div className="desk-layout" data-view={view}>
               <div className="primary-column">
                 <TabsContent
+                  value="materials"
+                  className="view-panel materials-page"
+                >
+                  <MaterialsWorkspace
+                    draft={courseDraft}
+                    onChange={changeCourse}
+                  />
+                </TabsContent>
+                <TabsContent
                   value="chatbot"
                   forceMount
                   hidden={view !== "chatbot"}
@@ -448,6 +483,7 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                     onPreferencesChange={setPreferences}
                     busy={busy}
                     error={error}
+                    onManageMaterials={() => setView("materials")}
                   />
                   <Button
                     variant="ghost"
@@ -937,7 +973,7 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
               </div>
               <aside
                 className="inspector"
-                hidden={view === "chatbot"}
+                hidden={view === "chatbot" || view === "materials"}
                 aria-label="Concept estimates and teaching preferences"
               >
                 <section className="knowledge-panel">

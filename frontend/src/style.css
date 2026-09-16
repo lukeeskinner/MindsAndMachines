@@ -4,6 +4,7 @@
 @import "./auth.css";
 @import "./onboarding.css";
 @import "./chatbot.css";
+@import "./materials.css";
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {

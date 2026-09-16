@@ -12,8 +12,10 @@ import { initialDraft } from "./components/onboarding/model";
 type Route = "login" | "setup" | "study";
 
 function routeFromHash(authenticated: boolean): Route {
-  if (window.location.hash === "#/study") return authenticated ? "study" : "login";
-  if (window.location.hash === "#/setup") return authenticated ? "setup" : "login";
+  if (window.location.hash === "#/study")
+    return authenticated ? "study" : "login";
+  if (window.location.hash === "#/setup")
+    return authenticated ? "setup" : "login";
   return authenticated ? "setup" : "login";
 }
 
@@ -72,7 +74,10 @@ export function RootApp() {
       )}
       {auth && visitedStudy && (
         <div hidden={route !== "study"}>
-          <App onEditSetup={() => navigate("setup")} />
+          <App
+            onEditSetup={() => navigate("setup")}
+            course={{ draft, onChange: setDraft }}
+          />
         </div>
       )}
     </>

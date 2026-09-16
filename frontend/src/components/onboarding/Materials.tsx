@@ -7,9 +7,11 @@ import { ACCEPTED_FILES, fileKey, formatSize, selectFiles } from "./model";
 export function Materials({
   files,
   onChange,
+  inputLabel = "Choose course materials",
 }: {
   files: File[];
   onChange: (files: File[]) => void;
+  inputLabel?: string;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
@@ -35,7 +37,7 @@ export function Materials({
         accept={ACCEPTED_FILES}
         className="sr-only"
         tabIndex={-1}
-        aria-label="Choose course materials"
+        aria-label={inputLabel}
         onChange={(event) => {
           add(Array.from(event.target.files ?? []));
           event.target.value = "";

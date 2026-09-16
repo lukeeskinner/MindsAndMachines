@@ -24,6 +24,7 @@ type Props = {
   onPreferencesChange: (value: LearnerPresentationPreferences) => void;
   busy: boolean;
   error: string;
+  onManageMaterials?: () => void;
 };
 
 const prompts = [
@@ -40,6 +41,7 @@ export function StudyChatbot({
   onPreferencesChange,
   busy,
   error,
+  onManageMaterials,
 }: Props) {
   const [draft, setDraft] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -284,6 +286,11 @@ export function StudyChatbot({
               have not been processed or sent to the tutor.
             </p>
           </Disclosure>
+          {onManageMaterials && (
+            <Button variant="ghost" onClick={onManageMaterials}>
+              Manage materials
+            </Button>
+          )}
           <TeachingPreferences
             preferences={preferences}
             onChange={onPreferencesChange}

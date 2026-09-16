@@ -24,16 +24,14 @@ beforeEach(() => {
   window.sessionStorage.clear();
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   Element.prototype.scrollIntoView = vi.fn();
-  fetchMock = vi
-    .fn()
-    .mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        session_id: "setup-demo",
-        question: fixture.next_question,
-        concepts: fixture.concepts,
-      }),
-    });
+  fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      session_id: "setup-demo",
+      question: fixture.next_question,
+      concepts: fixture.concepts,
+    }),
+  });
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => {
@@ -45,7 +43,10 @@ afterEach(() => {
 
 async function signIn() {
   const user = userEvent.setup({ applyAccept: false });
-  await user.type(screen.getByRole("textbox", { name: "Email" }), "alex@example.com");
+  await user.type(
+    screen.getByRole("textbox", { name: "Email" }),
+    "alex@example.com",
+  );
   await user.type(screen.getByLabelText("Password"), "correcthorsebattery");
   await user.click(screen.getByRole("button", { name: "Continue to setup" }));
   await screen.findByRole("heading", { name: "Let’s set up your course." });
@@ -63,7 +64,10 @@ describe("course onboarding", () => {
     expect(window.location.hash).toBe("#/study");
     await user.click(screen.getByRole("button", { name: "Continue to setup" }));
     expect(screen.getByText("Enter your email.")).toBeTruthy();
-    await user.type(screen.getByRole("textbox", { name: "Email" }), "alex@example.com");
+    await user.type(
+      screen.getByRole("textbox", { name: "Email" }),
+      "alex@example.com",
+    );
     await user.type(screen.getByLabelText("Password"), "correcthorsebattery");
     await user.click(screen.getByRole("button", { name: "Continue to setup" }));
     await screen.findByRole("heading", { name: "Let’s set up your course." });
@@ -209,6 +213,80 @@ describe("course onboarding", () => {
       ).checked,
     ).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("edits workspace materials and goals locally while preserving practice and sharing setup state", async () => {
+    render(<RootApp />);
+    const user = await signIn();
+    await user.upload(
+      screen.getByLabelText("Choose course materials"),
+      new File(["notes"], "lecture.txt"),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Open practice demo" }),
+    );
+    const answer = await screen.findByRole("radio", {
+      name: "Admissible, but not consistent.",
+    });
+    await user.click(answer);
+    await user.click(screen.getByRole("tab", { name: "Chatbot" }));
+    await user.click(screen.getByRole("button", { name: "Manage materials" }));
+    expect(
+      screen.getByRole("button", { name: "Remove lecture.txt" }),
+    ).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Edit course goals" }));
+    const name = screen.getByRole("textbox", { name: "Course name" });
+    await user.clear(name);
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(screen.getByText("Add a course name to continue.")).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(name));
+    await user.type(name, "Algorithms seminar");
+    await user.selectOptions(screen.getByLabelText("Study goal"), "understand");
+    await user.selectOptions(
+      screen.getByLabelText("Study time available"),
+      "3",
+    );
+    // File changes during editing must not be overwritten by saving goal fields.
+    await user.upload(
+      screen.getByLabelText("Add materials to workspace"),
+      new File(["reading"], "reading.md"),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Remove lecture.txt" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(screen.getByText("Changes saved in this tab.")).toBeTruthy();
+    expect(screen.getByText("Algorithms seminar")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Remove reading.md" }),
+    ).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Edit course goals" }));
+    await user.clear(screen.getByRole("textbox", { name: "Course name" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText("Algorithms seminar")).toBeTruthy();
+    await user.click(screen.getByRole("tab", { name: "Study desk" }));
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: "Admissible, but not consistent.",
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Course setup" }));
+    expect(
+      (screen.getByRole("textbox", { name: "Course name" }) as HTMLInputElement)
+        .value,
+    ).toBe("Algorithms seminar");
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("3");
+    expect(
+      screen.getByRole("button", { name: "Remove reading.md" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Remove lecture.txt" }),
+    ).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/sessions");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({});
   });
 
   it("limits the local file collection and rejects past dates", () => {
