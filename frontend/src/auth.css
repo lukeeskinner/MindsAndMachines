@@ -1,0 +1,183 @@
+@layer components {
+  .brand-wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    text-decoration: none;
+    font-family: "Manrope Variable", sans-serif;
+    font-size: 1.2rem;
+    font-weight: 800;
+    line-height: 1.03;
+  }
+  .brand-mark-shared {
+    width: 42px;
+    height: 45px;
+    display: grid;
+    place-items: center;
+    background: var(--accent);
+    color: white;
+    border-radius: 11px 11px 3px 11px;
+  }
+  .auth-shell {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    background:
+      linear-gradient(90deg, color-mix(in srgb, var(--teal-light) 48%, white), transparent 38%),
+      var(--background);
+  }
+  .auth-panel {
+    display: grid;
+    align-items: center;
+    padding: clamp(28px, 6vw, 78px);
+  }
+  .auth-card {
+    width: min(100%, 520px);
+  }
+  .auth-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 32px;
+  }
+  .auth-cognito-logo {
+    display: block;
+    width: 176px;
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+  }
+  .auth-heading {
+    max-width: 11ch;
+    margin-top: 18px;
+    font-size: clamp(2.4rem, 6vw, 4.65rem);
+    line-height: 0.96;
+  }
+  .auth-intro {
+    max-width: 34rem;
+    margin-top: 22px;
+    color: var(--muted-foreground);
+    font-size: 1.02rem;
+    line-height: 1.8;
+  }
+  .auth-form {
+    display: grid;
+    gap: 17px;
+    margin-top: 34px;
+  }
+  .auth-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.83rem;
+    font-weight: 750;
+  }
+  .auth-input-wrap {
+    position: relative;
+  }
+  .auth-input-wrap svg {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted-foreground);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .auth-error {
+    margin-top: 7px;
+    color: var(--destructive);
+    font-size: 0.86rem;
+    font-weight: 650;
+  }
+  .auth-submit,
+  .auth-hosted {
+    width: 100%;
+    min-height: 52px;
+    margin-top: 5px;
+  }
+  .auth-local-note {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-top: 14px;
+    color: var(--muted-foreground);
+    font-size: 0.9rem;
+  }
+  .auth-context {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 34px;
+    border-left: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .auth-context-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--teal-dark);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+  }
+  .auth-context-course {
+    margin-top: 26px;
+    padding: 20px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .auth-context-course span {
+    color: var(--muted-foreground);
+    font-size: 0.9rem;
+  }
+  .auth-context-course strong {
+    display: block;
+    margin-top: 7px;
+    font-family: "Manrope Variable", sans-serif;
+    font-size: 1.35rem;
+    line-height: 1.2;
+  }
+  .auth-checks {
+    display: grid;
+    gap: 13px;
+    margin: 24px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .auth-checks li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted-foreground);
+    font-size: 0.92rem;
+  }
+  .auth-checks svg {
+    color: var(--primary);
+  }
+  @media (max-width: 860px) {
+    .auth-shell {
+      grid-template-columns: 1fr;
+      background: var(--background);
+    }
+    .auth-panel {
+      min-height: auto;
+      padding: 24px;
+    }
+    .auth-card {
+      width: 100%;
+    }
+    .auth-heading {
+      max-width: 12ch;
+      font-size: 2.7rem;
+    }
+    .auth-context {
+      min-height: auto;
+      padding: 24px;
+      border-left: 0;
+      border-top: 1px solid var(--line);
+    }
+  }
+}
