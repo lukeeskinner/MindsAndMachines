@@ -7,7 +7,7 @@ from contracts.models import Candidate, Question
 class Catalog:
     def __init__(self) -> None:
         path = Path(__file__).resolve().parents[3] / "content" / "demo.json"
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         self.concept_ids = data["concepts"]
         self.questions = {q["question_id"]: Question(**q) for q in data["questions"]}
         self.first_question_id = next(iter(self.questions))

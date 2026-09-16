@@ -45,7 +45,7 @@ class BaselineTests(unittest.TestCase):
             self.assertEqual((c["mean"], c["interval90"], c["evidence_count"]),
                              (0.5, {"lower": 0.05, "upper": 0.95}, 0))
         first = self.answer(session, "a")
-        self.assertEqual({**first, "session_id": "example-session"}, json.loads(FIXTURE.read_text()))
+        self.assertEqual({**first, "session_id": "example-session"}, json.loads(FIXTURE.read_text(encoding="utf-8")))
         second = self.answer({"session_id": session["session_id"], "question": first["next_question"]}, "b")
         self.assertEqual(second["assessment"]["outcome"], "correct")
         self.assertEqual(target(second), {"concept_id": TARGET, "mean": 0.5,
