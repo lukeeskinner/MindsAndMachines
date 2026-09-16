@@ -108,6 +108,11 @@ describe("study desk interactions", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText("2.5%–77.6%")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Behind this response" }));
+    expect(screen.getByText("BayesianLearner")).toBeTruthy();
+    expect(screen.getByText("AdaptivePolicy")).toBeTruthy();
+    expect(screen.queryByText("FakeLearner")).toBeNull();
+    expect(screen.queryByText("FakePolicy")).toBeNull();
     await user.click(
       screen.getByRole("button", { name: "Try the next question" }),
     );

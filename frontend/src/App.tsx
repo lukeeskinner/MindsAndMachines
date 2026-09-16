@@ -55,8 +55,8 @@ const shortNames: Record<string, string> = {
 };
 const stages: Record<string, [string, string]> = {
   assess: ["Assessment", "FakeAssessor"],
-  update: ["Concept estimate", "FakeLearner"],
-  select: ["Next activity", "FakePolicy"],
+  update: ["Concept estimate", "BayesianLearner"],
+  select: ["Next activity", "AdaptivePolicy"],
   teach: ["Teaching response", "FakeTutor"],
 };
 const activityNames = {
@@ -129,8 +129,8 @@ function Trace({ result }: { result: TurnResponse }) {
   return (
     <Disclosure title="Behind this response">
       <p className="subtle">
-        Deterministic mode · {result.provider} provider. These are scripted
-        module calls, not live AI agents.
+        Deterministic mode · {result.provider} provider. Bayesian estimates and
+        adaptive selection; assessment and teaching remain fake. No live AI agents.
       </p>
       <ol className="trace-list">
         {result.trace.map((stage, index) => (
@@ -813,7 +813,7 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                     <div className="map-footer">
                       <Info size={16} />
                       <p>
-                        All estimates are scripted demo values. A 50% starting
+                        Estimates use Bayesian updates. A 50% starting
                         estimate with no evidence does not mean you know half
                         the material.
                       </p>
@@ -1004,9 +1004,8 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                       its 90% interval.
                     </p>
                     <p>
-                      These are canned demo fixtures. No learning model is
-                      running, and explanations alone never increase an
-                      estimate.
+                      Bayesian estimates update from accepted answer evidence.
+                      Explanations alone never increase an estimate.
                     </p>
                   </Disclosure>
                 </section>
