@@ -108,6 +108,11 @@ describe("study desk interactions", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText("2.5%–77.6%")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Behind this response" }));
+    expect(screen.getByText("BayesianLearner")).toBeTruthy();
+    expect(screen.getByText("AdaptivePolicy")).toBeTruthy();
+    expect(screen.queryByText("FakeLearner")).toBeNull();
+    expect(screen.queryByText("FakePolicy")).toBeNull();
     await user.click(
       screen.getByRole("button", { name: "Try the next question" }),
     );
@@ -133,6 +138,11 @@ describe("study desk interactions", () => {
     expect(
       screen.getByRole("heading", { name: "A connection worth keeping." }),
     ).toBeTruthy();
+    const changes = screen.getByRole("region", {
+      name: "Returned concept changes",
+    });
+    expect(changes.textContent).toContain("Observations: 0 → 2");
+    expect(changes.textContent).toContain("5.0%–95.0% → 13.5%–86.5%");
     await user.click(screen.getByRole("tab", { name: "Session activity" }));
     expect(
       screen.getByRole("heading", { name: "The relationship" }),
@@ -174,7 +184,7 @@ describe("study desk interactions", () => {
     ).toBe("true");
     expect(
       screen.getByRole("button", {
-        name: /Admissibility vs consistency.*50.0%/,
+        name: /Admissibility vs consistency.*No evidence/,
       }),
     ).toBeTruthy();
     expect(screen.getByText("0 observations")).toBeTruthy();
@@ -242,7 +252,104 @@ describe("study desk interactions", () => {
     expect(preference.getAttribute("aria-checked")).toBe("true");
     screen.getByRole("tab", { name: "Study desk" }).focus();
     await user.keyboard("{ArrowDown}");
+    await screen.findByRole("tabpanel", { name: "Chatbot" });
+    await user.keyboard("{ArrowDown}");
     await screen.findByRole("tabpanel", { name: "Concept map" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps chatbot drafts local across views and clears them on successful reset", async () => {
+    fetchMock.mockResolvedValueOnce(
+      respond({ ...initial, session_id: "fresh-session" }),
+    );
+    const user = await start();
+    const navigation = screen.getByRole("tablist", {
+      name: "Learning workspace",
+    });
+    await user.click(within(navigation).getByRole("tab", { name: "Chatbot" }));
+    const draft = screen.getByRole("textbox", {
+      name: "Your follow-up draft",
+    }) as HTMLTextAreaElement;
+    await user.click(
+      screen.getByRole("button", { name: "Walk me through the example" }),
+    );
+    expect(draft.value).toBe("Walk me through the example");
+    expect(document.activeElement).toBe(draft);
+    await user.type(draft, " with smaller steps.");
+    await user.keyboard("{Enter}");
+    const send = screen.getByRole("button", {
+      name: "Send",
+    }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    await user.click(send);
+    await user.click(screen.getByRole("tab", { name: "Study desk" }));
+    expect(
+      screen.queryByRole("textbox", { name: "Your follow-up draft" }),
+    ).toBeNull();
+    await user.click(screen.getByRole("tab", { name: "Chatbot" }));
+    await user.click(screen.getByRole("tab", { name: "Concept map" }));
+    expect(draft.value).toContain("with smaller steps.");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await user.click(
+      screen.getByRole("button", { name: "New session / reset" }),
+    );
+    await screen.findByRole("radio", { name: firstQuestion.choices[0].text });
+    await user.click(screen.getByRole("tab", { name: "Chatbot" }));
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("textbox", {
+            name: "Your follow-up draft",
+          }) as HTMLTextAreaElement
+        ).value,
+      ).toBe(""),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders only returned explanations, preserves unsure evidence, and exposes public context", async () => {
+    const unsure = {
+      ...fixture,
+      concepts: initial.concepts,
+      assessment: {
+        outcome: "unclear",
+        misconception_id: null,
+        feedback: "No evidence applied.",
+      },
+      tutor: {
+        text: "A returned fallback explanation.\n\n<script>not executable</script>",
+        fallback: true,
+      },
+    };
+    fetchMock.mockResolvedValueOnce(respond(unsure));
+    const user = await start();
+    await user.click(screen.getByRole("radio", { name: "I'm not sure yet." }));
+    await user.click(screen.getByRole("button", { name: "Check answer" }));
+    await screen.findByRole("button", { name: "Read explanation" });
+    await user.click(screen.getByRole("button", { name: "Read explanation" }));
+    await screen.findByRole("tabpanel", { name: "Chatbot" });
+    const conversation = screen.getByRole("region", {
+      name: "Study conversation",
+    });
+    expect(
+      within(conversation).getByText("A returned fallback explanation."),
+    ).toBeTruthy();
+    expect(within(conversation).getByText("Scripted fallback")).toBeTruthy();
+    expect(
+      within(conversation).getByText("<script>not executable</script>"),
+    ).toBeTruthy();
+    expect(conversation.querySelector("script")).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Context for this conversation" }),
+    );
+    expect(screen.getByText(fixture.next_question.prompt)).toBeTruthy();
+    expect(screen.getByText(/0 observations · 50.0% estimate/)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole("tab", { name: "Concept map" }));
+    const responses = screen.getByRole("region", {
+      name: "Answers for this concept",
+    });
+    expect(within(responses).getByText("No evidence applied.")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

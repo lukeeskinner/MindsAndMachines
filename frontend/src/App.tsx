@@ -12,9 +12,9 @@ import {
   Info,
   Layers3,
   LoaderCircle,
+  MessageSquare,
   Network,
   RotateCcw,
-  SlidersHorizontal,
   Terminal,
   Waypoints,
 } from "lucide-react";
@@ -28,7 +28,6 @@ import type {
 } from "../../contracts/api";
 import {
   Button,
-  Switch,
   Tabs,
   TabsContent,
   TabsList,
@@ -38,16 +37,15 @@ import {
 } from "./components/ui/primitives";
 import { motion, MotionConfig, useReducedMotion } from "motion/react";
 import { post } from "./lib/api";
-import { authConfigured, completeSignInRedirect, getIdToken, signIn, signOut } from "./auth";
+import { getIdToken } from "./auth/cognito";
+import { StudyChatbot } from "./components/study/StudyChatbot";
+import { EvidenceComparison } from "./components/study/EvidenceComparison";
+import { TeachingPreferences } from "./components/study/TeachingPreferences";
+import {
+  conceptNames as names,
+  type StudyEntry,
+} from "./components/study/model";
 
-const names: Record<string, string> = {
-  bfs: "Breadth-first search",
-  ucs: "Uniform-cost search",
-  astar: "A* search",
-  admissibility: "Admissibility",
-  consistency: "Consistency",
-  admissibility_vs_consistency: "Admissibility vs consistency",
-};
 const shortNames: Record<string, string> = {
   bfs: "BFS",
   ucs: "UCS",
@@ -58,8 +56,8 @@ const shortNames: Record<string, string> = {
 };
 const stages: Record<string, [string, string]> = {
   assess: ["Assessment", "FakeAssessor"],
-  update: ["Concept estimate", "FakeLearner"],
-  select: ["Next activity", "FakePolicy"],
+  update: ["Concept estimate", "BayesianLearner"],
+  select: ["Next activity", "AdaptivePolicy"],
   teach: ["Teaching response", "FakeTutor"],
 };
 const activityNames = {
@@ -80,17 +78,7 @@ const defaults: LearnerPresentationPreferences = {
   step_by_step: false,
   concise: false,
 };
-const preferencesList: [
-  keyof LearnerPresentationPreferences,
-  string,
-  string,
-][] = [
-  ["plain_language", "Plain language", "Explain unfamiliar terms"],
-  ["step_by_step", "Step by step", "Break the explanation down"],
-  ["concise", "Keep it concise", "Just the essentials"],
-];
 const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
-type Entry = { question: PublicQuestion; answer: string; result: TurnResponse };
 
 function Estimate({ concept }: { concept: ConceptEstimate }) {
   const reduced = useReducedMotion();
@@ -142,8 +130,8 @@ function Trace({ result }: { result: TurnResponse }) {
   return (
     <Disclosure title="Behind this response">
       <p className="subtle">
-        Deterministic mode · {result.provider} provider. These are scripted
-        module calls, not live AI agents.
+        Deterministic mode · {result.provider} provider. Bayesian estimates and
+        adaptive selection; assessment and teaching remain fake. No live AI agents.
       </p>
       <ol className="trace-list">
         {result.trace.map((stage, index) => (
@@ -164,7 +152,7 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
   const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState<PublicQuestion | null>(null);
   const [concepts, setConcepts] = useState<ConceptEstimate[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
+  const [entries, setEntries] = useState<StudyEntry[]>([]);
   const [answer, setAnswer] = useState("");
   const [preferences, setPreferences] = useState(defaults);
   const [busy, setBusy] = useState(true);
@@ -210,7 +198,7 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
     }
   }
   useEffect(() => {
-    void completeSignInRedirect().then(newSession);
+    void newSession();
   }, []);
   useEffect(() => {
     if (!window.matchMedia) return;
@@ -240,7 +228,10 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
     };
     try {
       const result = await post<TurnResponse>("turns", request);
-      setEntries((previous) => [...previous, { question, answer, result }]);
+      setEntries((previous) => [
+        ...previous,
+        { question, answer, result, before: concepts },
+      ]);
       setConcepts(result.concepts);
       setQuestion(result.next_question);
       setAnswer("");
@@ -256,12 +247,19 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
     }
   }
 
+  function openChatbot() {
+    setView("chatbot");
+    requestAnimationFrame(() =>
+      document.getElementById("chatbot-title")?.focus(),
+    );
+  }
+
   return (
     <MotionConfig reducedMotion="user">
       <Tabs
         value={view}
         onValueChange={setView}
-        className="app-shell"
+        className="app-shell workspace-with-chat"
         orientation={orientation}
       >
         <a className="skip-link" href="#workspace">
@@ -300,6 +298,17 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
               <BookOpen size={19} />
               Study desk
               <span className="nav-active-dot" />
+            </TabsTrigger>
+            <TabsTrigger
+              value="chatbot"
+              className="nav-item"
+              aria-label="Chatbot"
+            >
+              <MessageSquare size={19} />
+              Chatbot
+              {entries.length > 0 && (
+                <span className="nav-count">{entries.length}</span>
+              )}
             </TabsTrigger>
             <TabsTrigger
               value="map"
@@ -362,15 +371,6 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                 <RotateCcw size={15} />
                 <span>New session / reset</span>
               </Button>
-              {authConfigured && (getIdToken() ? (
-                <Button variant="ghost" onClick={() => signOut()}>
-                  Sign out
-                </Button>
-              ) : (
-                <Button variant="ghost" onClick={() => void signIn()}>
-                  Sign in
-                </Button>
-              ))}
             </div>
           </header>
           <main id="workspace" className="workspace" tabIndex={-1}>
@@ -380,16 +380,20 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                 <h1>
                   {view === "study"
                     ? "Make the connection."
-                    : view === "map"
-                      ? "See the bigger picture."
-                      : "Follow your thinking."}
+                    : view === "chatbot"
+                      ? "Chatbot"
+                      : view === "map"
+                        ? "See the bigger picture."
+                        : "Follow your thinking."}
                 </h1>
                 <p>
                   {view === "study"
                     ? "A little practice. A clearer understanding."
-                    : view === "map"
-                      ? "Six concepts, with room for uncertainty."
-                      : "Your answers, feedback, and next steps in one place."}
+                    : view === "chatbot"
+                      ? "Your study context, answers, and explanations together."
+                      : view === "map"
+                        ? "Six concepts, with room for uncertainty."
+                        : "Your answers, feedback, and next steps in one place."}
                 </p>
               </div>
               <div className="session-progress">
@@ -429,8 +433,33 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                 </Button>
               </div>
             )}
-            <div className="desk-layout">
+            <div className="desk-layout" data-view={view}>
               <div className="primary-column">
+                <TabsContent
+                  value="chatbot"
+                  forceMount
+                  hidden={view !== "chatbot"}
+                  className="view-panel chatbot-page"
+                >
+                  <StudyChatbot
+                    key={sessionId}
+                    entries={entries}
+                    question={question}
+                    concepts={concepts}
+                    preferences={preferences}
+                    onPreferencesChange={setPreferences}
+                    busy={busy}
+                    error={error}
+                  />
+                  <Button
+                    variant="ghost"
+                    className="back-to-study"
+                    onClick={() => setView("study")}
+                  >
+                    <ArrowLeft size={16} />
+                    Back to study desk
+                  </Button>
+                </TabsContent>
                 <TabsContent value="study" className="view-panel">
                   <div className="lesson-path" aria-label="Session sequence">
                     <span
@@ -507,30 +536,20 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                             }
                           </div>
                         </Disclosure>
-                        <div className="tutor-block">
-                          <div className="section-label">
-                            <span className="tutor-emblem">
-                              <Waypoints size={17} />
-                            </span>
+                        <div className="tutor-handoff">
+                          <MessageSquare size={23} aria-hidden="true" />
+                          <div>
                             <h3>
                               {review.result.decision
                                 ? activityNames[review.result.decision.kind]
                                 : "Tutor reflection"}
                             </h3>
-                            {review.result.tutor.fallback && (
-                              <span className="tag tag-fallback">
-                                Scripted fallback
-                              </span>
-                            )}
+                            <p>Your explanation is ready in Chatbot.</p>
                           </div>
-                          <div className="tutor-text">
-                            {review.result.tutor.text
-                              .split("\n")
-                              .filter(Boolean)
-                              .map((paragraph, i) => (
-                                <p key={i}>{paragraph}</p>
-                              ))}
-                          </div>
+                          <Button variant="secondary" onClick={openChatbot}>
+                            Read explanation
+                            <ArrowRight size={16} />
+                          </Button>
                         </div>
                         <div className="decision-strip">
                           <GitBranch size={19} />
@@ -575,7 +594,7 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                           ref={focusHeading}
                           tabIndex={-1}
                         >
-                          Admissibility vs consistency
+                          {names[question.concept_id] ?? question.concept_id}
                         </h2>
                         <form onSubmit={submit}>
                           <fieldset disabled={busy || !!error}>
@@ -672,6 +691,12 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                           </strong>
                           <span>accepted observations</span>
                         </div>
+                        {entries[0] && (
+                          <EvidenceComparison
+                            before={entries[0].before}
+                            after={concepts}
+                          />
+                        )}
                         <div className="completion-actions">
                           <Button onClick={() => setView("map")}>
                             Explore concept map
@@ -753,7 +778,9 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                                       )}
                                     </span>
                                     <span>
-                                      {concept ? pct(concept.mean) : "—"}
+                                      {concept?.evidence_count
+                                        ? pct(concept.mean)
+                                        : "—"}
                                       <small>
                                         {concept?.evidence_count
                                           ? `${concept.evidence_count} observations`
@@ -788,11 +815,49 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                     <div className="map-footer">
                       <Info size={16} />
                       <p>
-                        All estimates are scripted demo values. A 50% starting
+                        Estimates use Bayesian updates. A 50% starting
                         estimate with no evidence does not mean you know half
                         the material.
                       </p>
                     </div>
+                    {entries.some(
+                      (entry) => entry.question.concept_id === selectedConcept,
+                    ) && (
+                      <section
+                        className="concept-answer-history"
+                        aria-label="Answers for this concept"
+                      >
+                        <h3>Responses for this concept</h3>
+                        <ol>
+                          {entries
+                            .filter(
+                              (entry) =>
+                                entry.question.concept_id === selectedConcept,
+                            )
+                            .map((entry, index) => (
+                              <li key={entry.question.question_id}>
+                                <small>
+                                  Response {index + 1} ·{" "}
+                                  {entry.result.assessment.outcome}
+                                </small>
+                                <p>{entry.result.assessment.feedback}</p>
+                                <Disclosure
+                                  title={`Review response ${index + 1}`}
+                                >
+                                  <p>{entry.question.prompt}</p>
+                                  <p>
+                                    Your choice:{" "}
+                                    {entry.question.choices.find(
+                                      (choice) => choice.id === entry.answer,
+                                    )?.text ?? entry.answer}
+                                  </p>
+                                  <p>{entry.result.tutor.text}</p>
+                                </Disclosure>
+                              </li>
+                            ))}
+                        </ol>
+                      </section>
+                    )}
                   </section>
                   <Button
                     variant="ghost"
@@ -874,6 +939,7 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
               </div>
               <aside
                 className="inspector"
+                hidden={view === "chatbot"}
                 aria-label="Concept estimates and teaching preferences"
               >
                 <section className="knowledge-panel">
@@ -901,7 +967,11 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                               </span>
                             )}
                           </span>
-                          <strong>{pct(concept.mean)}</strong>
+                          <strong>
+                            {concept.evidence_count
+                              ? pct(concept.mean)
+                              : "No evidence"}
+                          </strong>
                         </button>
                       ))
                     ) : (
@@ -936,47 +1006,16 @@ export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
                       its 90% interval.
                     </p>
                     <p>
-                      These are canned demo fixtures. No learning model is
-                      running, and explanations alone never increase an
-                      estimate.
+                      Bayesian estimates update from accepted answer evidence.
+                      Explanations alone never increase an estimate.
                     </p>
                   </Disclosure>
                 </section>
-                <section className="preferences-panel">
-                  <div className="inspector-heading">
-                    <h2>Make it your own</h2>
-                    <SlidersHorizontal size={17} />
-                  </div>
-                  <p className="inspector-description">
-                    How should the tutor explain?
-                  </p>
-                  <div className="preference-list">
-                    {preferencesList.map(([key, label, description]) => (
-                      <div className="preference-row" key={key}>
-                        <label htmlFor={`pref-${key}`}>
-                          {label}
-                          <small id={`pref-help-${key}`}>{description}</small>
-                        </label>
-                        <Switch
-                          id={`pref-${key}`}
-                          checked={preferences[key]}
-                          onCheckedChange={(checked) =>
-                            setPreferences((old) => ({
-                              ...old,
-                              [key]: checked,
-                            }))
-                          }
-                          disabled={busy}
-                          aria-describedby={`pref-help-${key}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <p className="preference-note">
-                    Applies to the next response. Changes the explanation, never
-                    the estimate. Kept when you reset.
-                  </p>
-                </section>
+                <TeachingPreferences
+                  preferences={preferences}
+                  onChange={setPreferences}
+                  busy={busy}
+                />
                 <div className="inspector-footnote">
                   <Info size={14} />
                   <span>Practice space. Not a grade.</span>

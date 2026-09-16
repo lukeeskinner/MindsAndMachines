@@ -15,6 +15,7 @@ check:
 	$(PYTHON) -m unittest discover -s backend/tests/agents -v
 	$(PYTHON) -m unittest discover -s backend/tests/auth -v
 	$(PYTHON) -m unittest discover -s backend/tests/learner -v
+	$(PYTHON) -m unittest discover -s backend/tests/policy -v
 	$(PYTHON) -m unittest discover -s backend/tests/storage -v
 	npm --prefix frontend run build
 	npm --prefix frontend run test

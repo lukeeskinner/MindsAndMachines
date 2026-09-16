@@ -65,7 +65,7 @@ try:
             k:v for k,v in formatted.items() if k not in {"session_id", "tutor"}}
     assert first["tutor"]["text"] != formatted_first["tutor"]["text"]
     assert formatted_first["tutor"]["text"].startswith("1. ")
-    print("PASS: actual HTTP golden loop, canned values, reset, preference isolation.")
+    print("PASS: actual HTTP golden loop, posterior values, reset, preference isolation.")
 finally:
     process.terminate()
     process.wait(timeout=5)
