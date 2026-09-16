@@ -38,6 +38,7 @@ import {
 } from "./components/ui/primitives";
 import { motion, MotionConfig, useReducedMotion } from "motion/react";
 import { post } from "./lib/api";
+import { getIdToken } from "./auth/cognito";
 import { StudyChatbot } from "./components/study/StudyChatbot";
 import { MaterialsWorkspace } from "./components/study/MaterialsWorkspace";
 import { initialDraft, type CourseDraft } from "./components/onboarding/model";
@@ -189,7 +190,8 @@ export function App({
     setBusy(true);
     setError("");
     try {
-      const result = await post<SessionResponse>("sessions", {});
+      const token = getIdToken();
+      const result = await post<SessionResponse>("sessions", {}, token ? `Bearer ${token}` : undefined);
       setSessionId(result.session_id);
       setQuestion(result.question);
       setConcepts(result.concepts);

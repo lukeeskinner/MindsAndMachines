@@ -1,7 +1,9 @@
-export async function post<T>(path: string, body: object): Promise<T> {
+export async function post<T>(path: string, body: object, authHeader?: string): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authHeader) headers.Authorization = authHeader;
   const response = await fetch(`/api/v1/${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(20000),
   });

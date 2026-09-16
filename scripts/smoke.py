@@ -49,7 +49,7 @@ try:
     else:
         raise RuntimeError("Smoke server did not start")
     session, first, second = run_demo({})
-    fixture = json.loads((root / "contracts/fixtures/turn_response.json").read_text())
+    fixture = json.loads((root / "contracts/fixtures/turn_response.json").read_text(encoding="utf-8"))
     assert {**first, "session_id": "example-session"} == fixture
     focus = next(c for c in second["concepts"] if c["concept_id"] == "admissibility_vs_consistency")
     assert focus == {"concept_id": "admissibility_vs_consistency", "mean": 0.5,

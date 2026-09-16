@@ -9,15 +9,16 @@ class Session:
     question_id: str | None
     learner_state: LearnerState
     history: list[HistoryEntry] = field(default_factory=list)
+    user_id: str | None = None
 
 
 class MemoryStore:
     def __init__(self) -> None:
         self.sessions: dict[str, Session] = {}
 
-    def new_session(self, question_id: str, state: LearnerState) -> str:
+    def new_session(self, question_id: str, state: LearnerState, user_id: str | None = None) -> str:
         session_id = str(uuid4())
-        self.sessions[session_id] = Session(question_id, state)
+        self.sessions[session_id] = Session(question_id, state, user_id=user_id)
         return session_id
 
     def load_session(self, session_id: str) -> Session:

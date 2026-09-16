@@ -129,7 +129,7 @@ Thompson Sampling is a stretch only if time remains after the full live demo. It
 | Planning/simulation engine | Explainable candidate ranking; no simulated causal learning gains |
 | Content/research agent, large question bank | Authored local catalog with sources, rubrics and misconception tags |
 | Separate LLM support service | Provider adapter inside backend |
-| Auth and session manager | Anonymous per-browser demo session; backend-owned state |
+| Auth and session manager | Adopted post-G1: Cognito-backed per-user accounts (Hosted UI, ID-token verification), with the anonymous per-browser session as the fallback when no one is signed in |
 | Data store driving the user loop | API-owned memory for G1, simple SQLite later if useful; backend returns the public response directly |
 
 Reject microservices, vector databases/RAG, arbitrary syllabus ingestion, model training, production identity, separate dashboards, queues and elaborate agent frameworks for the initial demo. Each adds coordination work without proving the central learning loop.

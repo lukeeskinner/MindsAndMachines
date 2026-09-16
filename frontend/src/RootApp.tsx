@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { App } from "./App";
 import {
   clearAuthSession,
+  completeHostedSignIn,
   readAuthSession,
   type AuthSession,
 } from "./auth/cognito";
@@ -51,6 +52,13 @@ export function RootApp() {
     window.location.hash = "/setup";
     window.scrollTo({ top: 0, behavior: "instant" });
   }
+  // Completes the real Cognito Hosted UI redirect (auth/cognito.ts); a no-op
+  // on any other page load, so it's safe to always run once on mount.
+  useEffect(() => {
+    void completeHostedSignIn().then((session) => {
+      if (session) handleAuthenticated(session);
+    });
+  }, []);
   function handleSignOut() {
     clearAuthSession();
     setAuth(null);
