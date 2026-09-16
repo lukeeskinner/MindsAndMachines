@@ -23,9 +23,11 @@ function config(): { domain: string; clientId: string } | null {
 }
 
 function redirectUri(): string {
+  // Must exactly match a callback URL registered on the Cognito app client
+  // (no hash fragment: Cognito compares the literal redirect_uri string).
   return (
     (import.meta.env.VITE_COGNITO_REDIRECT_URI as string | undefined) ||
-    `${window.location.origin}${window.location.pathname}#/setup`
+    `${window.location.origin}${window.location.pathname}`
   );
 }
 
