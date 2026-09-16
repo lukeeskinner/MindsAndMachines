@@ -3,6 +3,7 @@ seam's read/write logic is correct without AWS credentials, a real table
 or boto3 even being installed (table is injected, so DynamoStore never
 imports boto3 in this test).
 """
+import json
 import unittest
 
 from backend.app.storage.dynamo import DynamoStore
@@ -38,6 +39,27 @@ class DynamoStoreTests(unittest.TestCase):
     def test_anonymous_session_has_no_user_id(self):
         session_id = self.store.new_session("q1", LearnerState(skills={}))
         self.assertIsNone(self.store.load_session(session_id).user_id)
+        self.assertIsNone(self.store.load_session(session_id).course_id)
+
+    def test_course_reference_round_trips_without_storing_artifact(self):
+        session_id = self.store.new_session("course-q1", LearnerState(skills={}),
+                                            user_id="user-abc", course_id="course-1")
+        session = self.store.load_session(session_id)
+        self.assertEqual(session.course_id, "course-1")
+        self.assertEqual(session.user_id, "user-abc")
+        session.question_id = None
+        self.store.save_session(session_id, session)
+        self.assertEqual(self.store.load_session(session_id).course_id, "course-1")
+        data = json.loads(self.store._table.items[session_id]["data"])
+        self.assertEqual(set(data), {"question_id", "learner_state", "history", "user_id", "course_id"})
+
+    def test_legacy_session_without_course_id_still_loads(self):
+        session_id = self.store.new_session("q1", LearnerState(skills={}))
+        item = self.store._table.items[session_id]
+        data = json.loads(item["data"])
+        del data["course_id"]
+        item["data"] = json.dumps(data)
+        self.assertIsNone(self.store.load_session(session_id).course_id)
 
     def test_save_updates_the_same_session(self):
         state = LearnerState(skills={})

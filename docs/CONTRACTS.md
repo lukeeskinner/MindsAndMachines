@@ -73,14 +73,30 @@ SWE1 wires dependencies in one place. The fake implementations occupy the same s
 
 | Endpoint | Request | Response |
 | --- | --- | --- |
-| `POST /api/v1/sessions` | Empty object | `session_id`, `question: PublicQuestion`, `concepts` |
+| `POST /api/v1/sessions` | Optional `SessionRequest: {course_id?: string|null}`; empty/absent body supported | `session_id`, `course_id: string|null`, `question: PublicQuestion`, `concepts` |
 | `POST /api/v1/turns` | `session_id`, `question_id`, `answer: string`, optional `presentation_preferences: LearnerPresentationPreferences` | TurnResponse below |
 
-The answer is a choice ID in G1. Free text can use the same string when supported by reviewed questions after G1. Reset creates a new session. A random session ID held in browser memory and a backend dictionary are sufficient for local synthetic-data G1; this alone is not authentication. Restarting either side may require a reset. No cookies, token hashing or refresh endpoint is required for the anonymous path.
+The course/session foundation adds optional course ownership. Omitted/null
+`course_id` preserves demo behavior. A registered course creates a **preview-only**
+session with its first public question and initial concept estimates; unknown IDs
+return 404 without creating state. Course turns return 409 before demo catalog
+lookup or Coordinator execution. Uploaded-course learning is not activated.
+Reset creates a new session: send the same `course_id` to retain course selection;
+omit it (or send null) to return to the demo. Existing sessions are unchanged.
+
+`PublicCourse` contains only `course_id`, `title`,
+`concepts: [{concept_id, display_name}]`, `source_filenames` and `question_count`.
+It is an explicit metadata projection available through the private course catalog;
+no discovery/upload HTTP endpoint is added. It omits summaries, source quotes,
+answer keys, rubrics, explanations, processing warnings and provider prompts.
+See [course/session foundation](COURSE_SESSION_FOUNDATION.md) for private lookup,
+adapter, persistence and later activation boundaries.
+
+The answer is a choice ID in G1. Free text can use the same string when supported by reviewed questions after G1. A random session ID held in browser memory and a backend dictionary are sufficient for local synthetic-data G1; this alone is not authentication. Restarting either side may require a reset. No cookies, token hashing or refresh endpoint is required for the anonymous path.
 
 Post-G1, real login is layered on top without breaking that anonymous baseline: `POST /api/v1/sessions` optionally accepts a `Authorization: Bearer <Cognito ID token>` header. When present and Cognito is configured (`COGNITO_USER_POOL_ID`/`COGNITO_APP_CLIENT_ID` set), the backend verifies the token's signature and claims via JWKS and ties the new session to the token's `sub`. When absent, or when Cognito isn't configured, the session stays anonymous exactly as before — this keeps G1's tests and dummy loop unaffected.
 
-Keep the learner's chosen preferences in browser memory and send the current values with each turn. Changes affect the next teaching response; they do not submit/regrade an answer or require a new endpoint. New-session/reset preserves these browser choices; a page reload may restore defaults. No server-side preference persistence is required. Session creation is unchanged; teaching provenance is the additive G2 response extension described above.
+Keep the learner's chosen preferences in browser memory and send the current values with each turn. Changes affect the next teaching response; they do not submit/regrade an answer or require a new endpoint. New-session/reset preserves these browser choices; a page reload may restore defaults. No server-side preference persistence is required. Teaching provenance is the additive G2 response extension described above.
 
 TurnResponse fields: `session_id`, `assessment` (the outcome, misconception and feedback only), `concepts`, `decision` (candidate ID, concept, kind and reason, or null), `tutor: {text,fallback,teaching_source}`, `next_question: PublicQuestion|null`, `mode` (dummy/live), `provider` (fake/bedrock), and `trace: list[string]`.
 

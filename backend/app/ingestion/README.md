@@ -1,8 +1,11 @@
 # Standalone course ingestion
 
 This module processes PDF/PPTX into an immutable **server-only** course artifact.
-It is deliberately not connected to the API, Coordinator, runtime catalog,
-Assessor, learner, policy, Tutor, storage, or frontend. No shared contracts change.
+The processing pipeline remains standalone. The
+[course/session foundation](../../../docs/COURSE_SESSION_FOUNDATION.md) now offers
+explicit private registration, public metadata and preview sessions for completed
+artifacts. There is no upload endpoint or uploaded-course learning activation;
+processing itself does not call storage, the API or the learning runtime.
 
 From the repository root, using Python 3.12 or 3.13:
 
@@ -138,13 +141,14 @@ execution available to the generation step.
    `await process_course(paths, title=title, mode=mode) -> ProcessedCourse`; handle
    `IngestionError` without exposing raw provider exceptions. Upload transport,
    authentication, file ownership, and persistence are not implemented here.
-2. Persist `course.to_dict()` privately, including source lookup and answer keys.
+2. Register the artifact privately with `MemoryCourseRegistry.register(course)`.
+   This keeps the full artifact in process memory; durable persistence is deferred.
    Resolve each reference via `materials[].chunks[].chunk_id` to its filename and
    page/slide number. IDs/location metadata must continue to come from trusted code.
-3. After content review, the existing server `Question` can be constructed from
+3. `storage.courses.adapt_question` now constructs the server `Question` from
    the local question's `question_id`, `concept_id`, `prompt`, `choices`, and
-   `answer_key`, with `rubric=explanation`. This mapping is a proposed future adapter;
-   no global type or caller was changed. `question.public()` exposes only the
+   `answer_key`, with `rubric=explanation`. It retains source references separately
+   in `AdaptedQuestion.source_refs`. `question.public()` exposes only the
    existing PublicQuestion-shaped fields and omits source answers/explanations.
 4. Build a course-scoped catalog and policy-eligible teaching/candidate content
    separately. This artifact does not contain intervention candidates, prerequisites,

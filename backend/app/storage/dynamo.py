@@ -25,9 +25,10 @@ class DynamoStore:
             table = boto3.resource("dynamodb", region_name=region).Table(table_name)
         self._table = table
 
-    def new_session(self, question_id: str, state: LearnerState, user_id: str | None = None) -> str:
+    def new_session(self, question_id: str, state: LearnerState, user_id: str | None = None,
+                    course_id: str | None = None) -> str:
         session_id = str(uuid4())
-        self._put(session_id, Session(question_id, state, [], user_id))
+        self._put(session_id, Session(question_id, state, [], user_id, course_id))
         return session_id
 
     def load_session(self, session_id: str) -> Session:
@@ -41,6 +42,7 @@ class DynamoStore:
             learner_state=LearnerState(**data["learner_state"]),
             history=[HistoryEntry(**entry) for entry in data["history"]],
             user_id=data.get("user_id"),
+            course_id=data.get("course_id"),
         )
 
     def save_session(self, session_id: str, session: Session) -> None:
@@ -52,5 +54,6 @@ class DynamoStore:
             "learner_state": session.learner_state.model_dump(),
             "history": [entry.model_dump() for entry in session.history],
             "user_id": session.user_id,
+            "course_id": session.course_id,
         }
         self._table.put_item(Item={"session_id": session_id, "data": json.dumps(data)})
