@@ -54,7 +54,9 @@ SWE1 wires dependencies in one place. The fake implementations occupy the same s
 | `POST /api/v1/sessions` | Empty object | `session_id`, `question: PublicQuestion`, `concepts` |
 | `POST /api/v1/turns` | `session_id`, `question_id`, `answer: string`, optional `presentation_preferences: LearnerPresentationPreferences` | TurnResponse below |
 
-The answer is a choice ID in G1. Free text can use the same string when supported by reviewed questions after G1. Reset creates a new session. A random session ID held in browser memory and a backend dictionary are sufficient for local synthetic-data G1; this is not authentication. Restarting either side may require a reset. No cookies, token hashing, persistent login or refresh endpoint is required.
+The answer is a choice ID in G1. Free text can use the same string when supported by reviewed questions after G1. Reset creates a new session. A random session ID held in browser memory and a backend dictionary are sufficient for local synthetic-data G1; this alone is not authentication. Restarting either side may require a reset. No cookies, token hashing or refresh endpoint is required for the anonymous path.
+
+Post-G1, real login is layered on top without breaking that anonymous baseline: `POST /api/v1/sessions` optionally accepts a `Authorization: Bearer <Cognito ID token>` header. When present and Cognito is configured (`COGNITO_USER_POOL_ID`/`COGNITO_APP_CLIENT_ID` set), the backend verifies the token's signature and claims via JWKS and ties the new session to the token's `sub`. When absent, or when Cognito isn't configured, the session stays anonymous exactly as before — this keeps G1's tests and dummy loop unaffected.
 
 Keep the learner's chosen preferences in browser memory and send the current values with each turn. Changes affect the next teaching response; they do not submit/regrade an answer or require a new endpoint. New-session/reset preserves these browser choices; a page reload may restore defaults. No server-side preference persistence is required. Session creation, TurnResponse and TeachingResult shapes are unchanged.
 

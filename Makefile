@@ -12,6 +12,8 @@ dev:
 
 check:
 	$(PYTHON) -m unittest discover -s tests/integration -v
+	$(PYTHON) -m unittest discover -s backend/tests/agents -v
+	$(PYTHON) -m unittest discover -s backend/tests/auth -v
 	npm --prefix frontend run build
 
 smoke:

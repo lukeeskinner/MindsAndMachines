@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from backend.app.agents.coordinator import Coordinator
+from backend.app.auth.cognito import AuthError, cognito_enabled, verify_id_token
 from backend.app.storage.memory import MemoryStore, Session
 from backend.app.teaching.catalog import Catalog
 from contracts.models import HistoryEntry, SessionResponse, TurnRequest, TurnResponse
@@ -9,9 +10,15 @@ def router_for(coordinator: Coordinator, store: MemoryStore, catalog: Catalog) -
     router = APIRouter(prefix="/api/v1")
 
     @router.post("/sessions", response_model=SessionResponse, status_code=201)
-    async def new_session() -> SessionResponse:
+    async def new_session(authorization: str | None = Header(None)) -> SessionResponse:
+        user_id = None
+        if cognito_enabled() and authorization is not None:
+            try:
+                user_id = verify_id_token(authorization)
+            except AuthError as exc:
+                raise HTTPException(401, str(exc)) from None
         initial = coordinator.learner.initial_state(catalog.concept_ids)
-        session_id = store.new_session(catalog.first_question_id, initial.state)
+        session_id = store.new_session(catalog.first_question_id, initial.state, user_id)
         return SessionResponse(session_id=session_id,
                                question=catalog.question(catalog.first_question_id).public(),
                                concepts=initial.concepts)
@@ -36,7 +43,7 @@ def router_for(coordinator: Coordinator, store: MemoryStore, catalog: Catalog) -
                              candidate_id=response.decision.candidate_id if response.decision else None)
         store.save_session(request.session_id, Session(
             response.next_question.question_id if response.next_question else None,
-            update.state, [*session.history, entry],
+            update.state, [*session.history, entry], session.user_id,
         ))
         return response
 

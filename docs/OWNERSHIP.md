@@ -11,6 +11,9 @@ Role names are placeholders for people, not GitHub accounts. The Phase 1 archite
 | SWE3 — diagnosis and orchestration | `backend/app/agents/`; `backend/tests/agents/` | Bounded coordinator, assessor, provider adapters, budgets and traces |
 | SWE4 — teaching and educational quality | `backend/app/teaching/`; `backend/tests/teaching/`; `content/`; `evals/` | Tutor/tools/verifier, authored items, rubrics, sources and educational evaluation |
 | DS — learner state and decisions | `backend/app/learner/`; `backend/app/policy/`; `backend/tests/learner/`; `backend/tests/policy/` | Bayesian model, policy, uncertainty, analytic fixtures and model explanation |
+| Claude (AI session) — AWS/DevOps groundwork | Local AWS CLI/credential configuration, read-only or single-call AWS verification, and the `backend/app/agents/` provider-adapter seam (`complete(...)` for fake/Bedrock per `docs/CONTRACTS.md`/`docs/AWS.md`) | Confirmed account, region and Bedrock model access; a provider adapter callable by real roles once G2 wiring is authorized |
+
+The user, acting as the project owner/Phase 1 architect, has explicitly authorized the Claude row above as a scoped exception to the general G1/G2 gate in WORKSTREAMS.md and the "no real model/provider calls" line in AGENTS.md: AWS account setup, CLI verification, and building the provider-adapter module itself. The G1 dummy loop and its wiring in `backend/app/main.py` stay untouched — FakeAssessor/FakeLearner/FakePolicy/FakeTutor remain the default composition; the adapter is additive, not yet wired into the live turn path.
 
 Ownership includes additions, deletions and renames. A rename crosses both source and destination owners. A new unlisted directory is integrator-owned until the map is explicitly revised. Ownership is permission to implement within an assigned task, not permission to start any feature at any time.
 

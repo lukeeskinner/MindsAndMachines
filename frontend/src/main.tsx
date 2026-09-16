@@ -5,6 +5,7 @@ import type {
   ConceptEstimate, LearnerPresentationPreferences, PublicQuestion, SessionResponse,
   TurnRequest, TurnResponse,
 } from '../../contracts/api';
+import { authConfigured, completeSignInRedirect, getIdToken, signIn, signOut } from './auth';
 import './style.css';
 
 const conceptNames: Record<string, string> = {
@@ -22,9 +23,11 @@ const stageNames: Record<string, string> = {
 };
 const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
 
-async function post<T>(path: string, body: object): Promise<T> {
+async function post<T>(path: string, body: object, authHeader?: string): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authHeader) headers.Authorization = authHeader;
   const response = await fetch(`/api/v1/${path}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    method: 'POST', headers, body: JSON.stringify(body),
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
@@ -48,13 +51,14 @@ function App() {
   async function newSession() {
     setBusy(true); setError('');
     try {
-      const result = await post<SessionResponse>('sessions', {});
+      const token = getIdToken();
+      const result = await post<SessionResponse>('sessions', {}, token ? `Bearer ${token}` : undefined);
       setSessionId(result.session_id); setQuestion(result.question); setConcepts(result.concepts);
       setTurn(null); setAnswer(''); setAnswered(0);
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
   }
-  useEffect(() => { void newSession(); }, []);
+  useEffect(() => { void completeSignInRedirect().then(newSession); }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -78,6 +82,9 @@ function App() {
     <header className="topbar">
       <a className="brand" href="/" aria-label="Minds and Machines home"><span className="brand-mark" aria-hidden="true">m.</span> Minds & Machines</a>
       <span className="mode"><span aria-hidden="true" /> Deterministic demo · no live AI</span>
+      {authConfigured && (getIdToken()
+        ? <button className="reset" onClick={() => signOut()}>Sign out</button>
+        : <button className="reset" onClick={() => void signIn()}>Sign in</button>)}
     </header>
     <main>
       <div className="intro">
