@@ -24,6 +24,32 @@
       ],
       "answer_key": "b",
       "rubric": "Estimates 4,1,0 do not exceed true remaining costs 4,3,0. Consistency fails on S→A because 4 > 1+1."
+    },
+    {
+      "question_id": "relationship-q03",
+      "concept_id": "admissibility_vs_consistency",
+      "prompt": "A directed graph has only these edges: S → A (cost 2), A → G (cost 4), and S → G (cost 7). G is the goal. Let h(S)=5, h(A)=1, h(G)=0. Which description fits this heuristic?",
+      "choices": [
+        {"id": "a", "text": "Admissible, but not consistent."},
+        {"id": "b", "text": "Both admissible and consistent."},
+        {"id": "c", "text": "Neither admissible nor consistent."},
+        {"id": "unsure", "text": "I'm not sure yet."}
+      ],
+      "answer_key": "a",
+      "rubric": "True remaining costs at S,A,G are 6,4,0, so estimates 5,1,0 are admissible. Consistency fails on S→A because 5 > 2+1. The other edges pass: 1 <= 4+0 and 5 <= 7+0. Choosing both conditions confuses a bound on total remaining cost with the edge constraint."
+    },
+    {
+      "question_id": "relationship-q04",
+      "concept_id": "admissibility_vs_consistency",
+      "prompt": "A directed graph has only these edges: S → A (cost 2), A → G (cost 5), and S → G (cost 8). G is the goal. Let h(S)=6, h(A)=4, h(G)=0. Which description fits this heuristic?",
+      "choices": [
+        {"id": "a", "text": "Both admissible and consistent."},
+        {"id": "b", "text": "Admissible, but not consistent."},
+        {"id": "c", "text": "Neither admissible nor consistent."},
+        {"id": "unsure", "text": "I'm not sure yet."}
+      ],
+      "answer_key": "a",
+      "rubric": "True remaining costs at S,A,G are 7,5,0, so estimates 6,4,0 are admissible. All edges satisfy consistency: 6 <= 2+4, 4 <= 5+0, and 6 <= 8+0. Underestimating remaining costs can coexist with consistency; the edge check need not fail."
     }
   ],
   "candidates": [
@@ -33,9 +59,51 @@
       "kind": "worked_example",
       "content_id": "heuristic-distinction",
       "next_question_id": "relationship-q02"
+    },
+    {
+      "candidate_id": "relationship-probe",
+      "concept_id": "admissibility_vs_consistency",
+      "kind": "diagnostic_probe",
+      "content_id": "heuristic-distinction-probe",
+      "next_question_id": "relationship-q03"
+    },
+    {
+      "candidate_id": "relationship-hint",
+      "concept_id": "admissibility_vs_consistency",
+      "kind": "socratic_hint",
+      "content_id": "heuristic-distinction-hint",
+      "next_question_id": "relationship-q04"
     }
   ],
   "teaching": {
+    "heuristic-distinction-probe": {
+      "standard": [
+        "Does the displayed heuristic satisfy admissibility, consistency, both, or neither? Make each judgment separately."
+      ],
+      "plain": [
+        "For the estimates shown, which labels fit: admissible, consistent, both, or neither? Consider each label separately."
+      ],
+      "concise": [
+        "Which conditions does the displayed heuristic meet: admissibility, consistency, both, or neither?"
+      ],
+      "plain_concise": [
+        "Which labels fit the estimates shown: admissible, consistent, both, or neither?"
+      ]
+    },
+    "heuristic-distinction-hint": {
+      "standard": [
+        "After checking estimates against cheapest remaining path costs, what happens if you compare each estimate with the edge cost plus the neighboring estimate?"
+      ],
+      "plain": [
+        "Check each guess against the cheapest remaining route. Then ask: does any guess drop by more than the cost of one step?"
+      ],
+      "concise": [
+        "Besides the remaining path cost, what does the edge cost plus the neighboring estimate tell you?"
+      ],
+      "plain_concise": [
+        "After checking the cheapest remaining route, can a guess drop too far in one step?"
+      ]
+    },
     "heuristic-distinction": {
       "standard": [
         "Admissibility is a global bound: h(n) must not exceed the optimal remaining path cost h*(n). Consistency is a local constraint: h(n) ≤ c(n,n′) + h(n′) on every edge.",

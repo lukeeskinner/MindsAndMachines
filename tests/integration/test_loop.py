@@ -44,6 +44,12 @@ class BaselineTests(unittest.TestCase):
         return response.json()
 
     def test_golden_loop_fixture_and_reset(self):
+        # Preserve the original worked-example-only contract fixture. The expanded
+        # production catalog and its natural policy order are covered separately.
+        catalog = Catalog()
+        catalog.candidates = [c for c in catalog.candidates if c.candidate_id == "relationship-example"]
+        with patch("backend.app.main.Catalog", return_value=catalog):
+            self.client = TestClient(create_app())
         session = self.new_session()
         self.assertEqual(len(session["concepts"]), 6)
         for c in session["concepts"]:
@@ -95,10 +101,10 @@ class BaselineTests(unittest.TestCase):
         self.assertIn(first["decision"]["candidate_id"], [c.candidate_id for c in candidates])
         # A second incorrect answer differs from the fake's canned golden path.
         second = self.answer({"session_id": session["session_id"],
-                              "question": first["next_question"]}, "a")
+                              "question": first["next_question"]}, "b")
         self.assertEqual(target(second), {"concept_id": TARGET, "mean": 0.25,
             "interval90": {"lower": 0.017, "upper": 0.6316}, "evidence_count": 2})
-        self.assertIsNone(second["decision"])
+        self.assertEqual(second["decision"]["kind"], "worked_example")
         for result in [first, second]:
             self.assertEqual([c for c in result["concepts"] if c["concept_id"] != TARGET],
                              [c for c in session["concepts"] if c["concept_id"] != TARGET])
@@ -109,7 +115,10 @@ class BaselineTests(unittest.TestCase):
         self.assertEqual(response["concepts"], session["concepts"])
         self.assertEqual(response["assessment"]["outcome"], "unclear")
         self.assertTrue(response["tutor"]["fallback"])
-        self.assertIn("Let's try another example.", response["tutor"]["text"])
+        self.assertEqual(response["decision"]["kind"], "diagnostic_probe")
+        self.assertEqual(response["next_question"]["question_id"], "relationship-q03")
+        self.assertEqual(response["tutor"]["text"], "\n\n".join(
+            Catalog().teaching["heuristic-distinction-probe"]["standard"]))
 
     def test_preferences_require_booleans(self):
         session = self.new_session()

@@ -30,7 +30,7 @@ class TutorRuntimeTests(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.catalog = Catalog()
-        self.generated = " ".join(self.catalog.teaching["heuristic-distinction"]["standard"])
+        self.generated = " ".join(self.catalog.teaching["heuristic-distinction-hint"]["standard"])
         sdk = patch("boto3.client")
         self.factory = sdk.start()
         self.addCleanup(sdk.stop)
@@ -71,26 +71,38 @@ class TutorRuntimeTests(unittest.TestCase):
         self.assertEqual(result["tutor"]["fallback"], fallback)
         self.assertEqual(result["tutor"]["teaching_source"], "authored_fallback" if fallback else "bedrock")
         self.assertEqual((result["mode"], result["provider"]), ("dummy", "fake") if fallback else ("live", "bedrock"))
-        self.assertEqual(result["next_question"]["question_id"], "relationship-q02")
-        self.assertEqual(result["decision"]["candidate_id"], "relationship-example")
+        self.assertEqual(result["next_question"]["question_id"], "relationship-q04")
+        self.assertEqual(result["decision"]["candidate_id"], "relationship-hint")
         self.sdk.converse.assert_called_once()
         stored = self.store.load_session(self.session["session_id"])
-        self.assertEqual(stored.question_id, "relationship-q02")
+        self.assertEqual(stored.question_id, "relationship-q04")
         self.assertEqual(stored.learner_state.skills["admissibility_vs_consistency"].evidence_count, 1)
         self.assertEqual(len(stored.history), 1)
         self.assertEqual(stored.history[0].candidate_id, result["decision"]["candidate_id"])
         if fallback:
             self.assertEqual(result["tutor"]["text"], "\n\n".join(
-                self.catalog.teaching["heuristic-distinction"]["standard"]))
-        second = self.answer("relationship-q02", "b")
-        self.assertEqual(second.status_code, 200)
-        self.assertIsNone(second.json()["next_question"])
-        self.assertEqual(second.json()["tutor"]["teaching_source"], "authored")
-        self.assertEqual(second.json()["provider"], "fake")
-        self.sdk.converse.assert_called_once()  # Completion never generates.
+                self.catalog.teaching["heuristic-distinction-hint"]["standard"]))
+        for question_id, answer, content_id, next_id in [
+            ("relationship-q04", "a", "heuristic-distinction-probe", "relationship-q03"),
+            ("relationship-q03", "a", "heuristic-distinction", "relationship-q02"),
+        ]:
+            if not fallback:
+                self.sdk.converse.return_value = self.envelope(json.dumps({
+                    "text": " ".join(self.catalog.teaching[content_id]["standard"])}))
+            response = self.answer(question_id, answer)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["next_question"]["question_id"], next_id)
+            self.assertEqual(response.json()["tutor"]["teaching_source"],
+                             "authored_fallback" if fallback else "bedrock")
+        final = self.answer("relationship-q02", "b")
+        self.assertEqual(final.status_code, 200)
+        self.assertIsNone(final.json()["next_question"])
+        self.assertEqual(final.json()["tutor"]["teaching_source"], "authored")
+        self.assertEqual(final.json()["provider"], "fake")
+        self.assertEqual(self.sdk.converse.call_count, 3)  # Completion never generates.
         stored = self.store.load_session(self.session["session_id"])
-        self.assertEqual(len(stored.history), 2)
-        self.assertEqual(stored.learner_state.skills["admissibility_vs_consistency"].evidence_count, 2)
+        self.assertEqual(len(stored.history), 4)
+        self.assertEqual(stored.learner_state.skills["admissibility_vs_consistency"].evidence_count, 4)
         reset = self.client.post("/api/v1/sessions", json={}).json()
         self.assertNotEqual(reset["session_id"], self.session["session_id"])
         self.assertEqual(reset["concepts"], self.session["concepts"])
@@ -148,7 +160,7 @@ class TutorRuntimeTests(unittest.TestCase):
         self.assertIn("configuration error", response.json()["detail"])
         self.assertEqual(self.store.load_session(self.session["session_id"]), original)
         catalog = Catalog()
-        del catalog.questions["relationship-q02"]
+        del catalog.questions["relationship-q04"]
         with patch("backend.app.main.Catalog", return_value=catalog):
             client = TestClient(create_app())
         response = self.answer(client=client)
@@ -182,7 +194,7 @@ class TutorRuntimeTests(unittest.TestCase):
                     response = self.answer()
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["tutor"]["teaching_source"], source)
-                self.assertEqual(response.json()["next_question"]["question_id"], "relationship-q02")
+                self.assertEqual(response.json()["next_question"]["question_id"], "relationship-q04")
                 self.sdk.converse.assert_called_once()
                 logs = "\n".join(captured.output)
                 self.assertIn("runtime_start pid=", logs)

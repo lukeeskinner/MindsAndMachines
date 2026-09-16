@@ -293,7 +293,7 @@ export function Onboarding({
                       Try the learning experience
                     </h2>
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                      The practice demo uses our two Intro AI questions. Your
+                      The practice demo uses our Intro AI questions. Your
                       materials and goals are a local draft; they haven’t
                       generated a study plan yet.
                     </p>

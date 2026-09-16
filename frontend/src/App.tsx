@@ -374,7 +374,7 @@ export function App({
               <span />
               Adaptive learning demo
             </div>
-            <p className="rail-footnote">Two questions. Teaching source shown per response.</p>
+            <p className="rail-footnote">Teaching source shown per response.</p>
           </div>
         </aside>
         <div className="app-main">
@@ -442,12 +442,11 @@ export function App({
                     THIS SESSION{" "}
                     <strong>
                       {entries.length}
-                      <span> / 2</span>
                     </strong>
                   </span>
                   <div
                     className="progress-segments"
-                    aria-label={`${entries.length} of 2 questions answered`}
+                    aria-label={`${entries.length} questions answered`}
                   >
                     <span className={entries.length > 0 ? "filled" : ""} />
                     <span className={entries.length > 1 ? "filled" : ""} />
@@ -582,7 +581,7 @@ export function App({
                       <Scene key={`review-${entries.length}`}>
                         <div className="surface-meta">
                           <Outcome result={review.result} />
-                          <span>REFLECTION {entries.length} / 2</span>
+                          <span>REFLECTION {entries.length}</span>
                         </div>
                         <h2
                           ref={focusHeading}
@@ -645,7 +644,7 @@ export function App({
                               ? "TRANSFER PRACTICE"
                               : "QUICK CHECK"}
                           </span>
-                          <span>QUESTION {entries.length + 1} / 2</span>
+                          <span>QUESTION {entries.length + 1}</span>
                         </div>
                         <h2
                           className="surface-title"
@@ -1000,7 +999,7 @@ export function App({
                                 </div>
                                 <p className="subtle">
                                   {entry.result.decision?.reason ??
-                                    "Two-question demo complete."}
+                                    "Demo complete."}
                                 </p>
                               </Disclosure>
                               <Trace result={entry.result} />

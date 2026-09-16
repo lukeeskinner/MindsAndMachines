@@ -2,7 +2,7 @@ from contracts.models import Assessment, Question
 
 
 class FakeAssessor:
-    """Deterministic answer-key lookup for the two authored demo questions."""
+    """Deterministic answer-key lookup for the authored demo questions."""
 
     async def assess(self, question: Question, answer: str) -> Assessment:
         if answer == "unsure":

@@ -60,7 +60,7 @@ class TutorTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(outcome=outcome):
                 self.assessment.outcome = outcome
                 result = await self.teach()
-                self.assertEqual(result.text, "This two-question demo is complete. Start a new session to replay it.")
+                self.assertEqual(result.text, "This demo is complete. Start a new session to replay it.")
                 self.assertIsNone(result.next_question_id)
                 self.assertFalse(result.fallback)
         self.complete.assert_not_called()

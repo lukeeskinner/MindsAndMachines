@@ -49,7 +49,7 @@ const completed = {
       : c,
   ),
   decision: null,
-  tutor: { text: "Two-question demo complete.", fallback: false },
+  tutor: { text: "Demo complete.", fallback: false },
   next_question: null,
 };
 const respond = (body: unknown, ok = true) => ({ ok, json: async () => body });
