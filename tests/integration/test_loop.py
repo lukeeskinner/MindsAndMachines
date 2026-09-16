@@ -1,13 +1,14 @@
 import json
 from pathlib import Path
 import unittest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from backend.app.main import create_app
 from backend.app.agents.coordinator import Coordinator
 from backend.app.agents.assessor import FakeAssessor
 from backend.app.learner.fake import FakeLearner
 from backend.app.policy.fake import FakePolicy
+from backend.app.policy.adaptive import AdaptivePolicy
 from backend.app.teaching.catalog import Catalog
 from backend.app.teaching.fake import FakeTutor
 from contracts.models import Assessment, TeachingResult
@@ -75,6 +76,28 @@ class BaselineTests(unittest.TestCase):
                 self.assertEqual(formatted["tutor"]["fallback"], original["tutor"]["fallback"])
                 if prefs.get("step_by_step"):
                     self.assertTrue(formatted["tutor"]["text"].startswith("1. "))
+
+    def test_runtime_policy_receives_posterior_and_learner_keeps_updating(self):
+        session = self.new_session()
+        with patch.object(AdaptivePolicy, "choose", autospec=True,
+                          side_effect=AdaptivePolicy.choose) as choose:
+            first = self.answer(session, "a")
+        choose.assert_called_once()
+        _, concepts, assessment, candidates, history = choose.call_args.args
+        self.assertEqual([c.model_dump() for c in concepts], first["concepts"])
+        self.assertEqual(assessment.score, 0)
+        self.assertEqual(candidates, Catalog().candidates)
+        self.assertEqual(history, [])
+        self.assertIn(first["decision"]["candidate_id"], [c.candidate_id for c in candidates])
+        # A second incorrect answer differs from the fake's canned golden path.
+        second = self.answer({"session_id": session["session_id"],
+                              "question": first["next_question"]}, "a")
+        self.assertEqual(target(second), {"concept_id": TARGET, "mean": 0.25,
+            "interval90": {"lower": 0.017, "upper": 0.6316}, "evidence_count": 2})
+        self.assertIsNone(second["decision"])
+        for result in [first, second]:
+            self.assertEqual([c for c in result["concepts"] if c["concept_id"] != TARGET],
+                             [c for c in session["concepts"] if c["concept_id"] != TARGET])
 
     def test_unclear_answer_uses_trivial_fallback_without_evidence(self):
         session = self.new_session()
