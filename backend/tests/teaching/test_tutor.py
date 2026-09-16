@@ -536,9 +536,9 @@ class TutorTests(unittest.IsolatedAsyncioTestCase):
             await self.teach()
         self.complete.assert_not_called()
 
-    async def test_unsupported_intervention_is_configuration_error(self):
+    async def test_intervention_without_matching_reviewed_candidate_is_configuration_error(self):
         self.decision.kind = "socratic_hint"
-        with self.assertRaisesRegex(ValueError, "No reviewed worked example"):
+        with self.assertRaisesRegex(ValueError, "No reviewed content"):
             await self.teach()
         self.complete.assert_not_called()
 

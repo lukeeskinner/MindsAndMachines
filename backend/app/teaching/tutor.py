@@ -1,7 +1,7 @@
 """Runtime teaching: authored locally, with opt-in validated Bedrock prose.
 
-Live prose may paraphrase the authored example. The local checks detect explicit
-control instructions, leakage and contradictions in this demo's graph; they do
+Live prose may paraphrase the selected authored intervention. The local checks
+detect explicit control instructions, leakage and contradictions in this demo's graph; they do
 not prove arbitrary prose correct or serve as a general hallucination detector.
 """
 import json
@@ -33,6 +33,8 @@ _VALIDATION_MESSAGES = frozenset({
     "Expected consecutive numbered steps", "Expected multiple steps",
     "Plain-language teaching should explain without formal h/c notation",
     "Teaching exceeds the concise presentation budget",
+    "Teaching reveals a solution instead of prompting the learner",
+    "Teaching exceeds the hint presentation budget",
 })
 
 
@@ -57,6 +59,14 @@ facts, transfer-question solutions, or policy/mastery updates. If
 step_by_step is true, use consecutive numbered steps starting '1. ', each on one
 line; otherwise use unnumbered prose. Return strict JSON only, exactly
 {"text": "..."}, with no other fields, Markdown fences, or commentary."""
+
+_GUIDANCE_SYSTEM = """
+For diagnostic_probe, restate the authored prompt or ask a short probing question
+to gather evidence; do not teach the solution or turn it into a worked example.
+For socratic_hint, paraphrase the authored hint or direct attention to its reasoning
+step. Keep it short and targeted. For both kinds, never give the final answer,
+identify the answer choice, or add a solved example. Use only authored content;
+do not infer a solution from the assessment or estimate."""
 
 
 def _sentences(text: str) -> list[str]:
@@ -205,10 +215,47 @@ def _check_content(prose: str, paragraphs: list[str], *, decision: Decision,
     _check_example(text, authored)
 
 
+def _check_guidance(prose: str, paragraphs: list[str], private_answers: tuple[str, ...]) -> None:
+    """Narrow answer/solution checks for probes and hints, not a semantic verifier."""
+    text = _normalized(prose)
+    authored = _normalized(" ".join(paragraphs))
+    # Check answer text locally; private answers never enter the model prompt.
+    # A verbatim reviewed prompt may list choices. Generated rewrites containing
+    # the answer are conservatively rejected: they could single out that choice.
+    if text == authored:
+        return
+    answer_text = re.sub(r"[^\w\s]", "", text)
+    for answer in private_answers:
+        answer = re.sub(r"[^\w\s]", "", _normalized(answer))
+        if answer and re.search(r"\b" + re.escape(answer) + r"\b", answer_text):
+            raise ValueError("Teaching reveals a solution instead of prompting the learner")
+    solution_claims = (
+        r"\b(?:answer|solution|result)\s*(?:is\b|=|:)",
+        r"^(?:it's\s+|it is\s+)?[a-z][.!]?$",
+        r"\b(?:choose|select|pick|mark)\s+(?:option\s+|choice\s+)?[a-z]\b",
+        r"\b(?:worked|solved) example\b",
+        r"\b(?:therefore|thus|hence)\b",
+        r"\b(?:heuristic|estimates?|guesses?)\s+(?:is|are)\s+"
+        r"(?:both\s+)?(?:admissible|consistent|inconsistent)\b",
+        r"\b(?:consistency|admissibility)\s+(?:fails|holds|is satisfied|is violated)\b",
+        r"\b(?:edge|graph)\s+(?:fails|violates|satisfies)\s+(?:consistency|admissibility)\b",
+        r"\b(?:consistency|admissibility)\s+(?:alone\s+)?"
+        r"(?:(?:does not|doesn't)\s+)?(?:implies|imply|guarantees|guarantee|ensures|ensure)\b",
+        _NUMBER + r"\s*(?:[<>=≤≥]|is (?:greater|less) than|is equal to)",
+    )
+    # Exact reviewed sentences remain valid; generated additions cannot introduce
+    # an explicit conclusion, including a leading question that gives it away.
+    reviewed_sentences = {_normalized(sentence) for sentence in _sentences(authored)}
+    for sentence in _sentences(text):
+        if sentence not in reviewed_sentences and any(re.search(rule, sentence) for rule in solution_claims):
+            raise ValueError("Teaching reveals a solution instead of prompting the learner")
+
+
 def _validated_text(raw: str, paragraphs: list[str], step_by_step: bool, *,
                     decision: Decision, assessment: Assessment, target: ConceptEstimate,
                     expected_next: str | None, private_rubrics: tuple[str, ...],
-                    preferences: LearnerPresentationPreferences) -> str:
+                    preferences: LearnerPresentationPreferences,
+                    private_answers: tuple[str, ...] = ()) -> str:
     # Bound the envelope too, allowing JSON's six-character Unicode escapes.
     if not isinstance(raw, str) or len(raw) > MAX_TEXT_LENGTH * 6 + 64:
         raise ValueError("Invalid or excessive provider response")
@@ -231,7 +278,7 @@ def _validated_text(raw: str, paragraphs: list[str], step_by_step: bool, *,
             if not match:
                 raise ValueError("Expected consecutive numbered steps")
             steps.append(match.group(1))
-        if len(steps) < 2:
+        if len(steps) < (2 if decision.kind == "worked_example" else 1):
             raise ValueError("Expected multiple steps")
         prose = " ".join(steps)
 
@@ -241,6 +288,10 @@ def _validated_text(raw: str, paragraphs: list[str], step_by_step: bool, *,
         raise ValueError("Teaching exceeds the concise presentation budget")
     _check_content(prose, paragraphs, decision=decision, assessment=assessment, target=target,
                    expected_next=expected_next, private_rubrics=private_rubrics)
+    if decision.kind != "worked_example":
+        if decision.kind == "socratic_hint" and len(text) > 360:
+            raise ValueError("Teaching exceeds the hint presentation budget")
+        _check_guidance(prose, paragraphs, private_answers)
     return text
 
 
@@ -269,13 +320,14 @@ class Tutor:
         targets = [concept for concept in concepts if concept.concept_id == decision.concept_id]
         if len(targets) != 1:
             raise ValueError(f"Expected exactly one estimate for {decision.concept_id!r}; found {len(targets)}")
-        if decision.kind != "worked_example" or not any(
-            candidate.content_id == decision.content_id
+        if decision.kind not in {"diagnostic_probe", "worked_example", "socratic_hint"} or not any(
+            candidate.candidate_id == decision.candidate_id
+            and candidate.content_id == decision.content_id
             and candidate.concept_id == decision.concept_id
             and candidate.kind == decision.kind
             for candidate in self.catalog.candidates
         ):
-            raise ValueError("No reviewed worked example for the selected concept and intervention")
+            raise ValueError("No reviewed content for the selected candidate, concept and intervention")
 
         prefs = presentation_preferences
         variant = ("plain_concise" if prefs.plain_language and prefs.concise else
@@ -302,9 +354,11 @@ class Tutor:
         if mode != "bedrock":
             return finish(fallback, "unsupported_provider")
 
-        diagnosis = {"outcome": assessment.outcome, "feedback": assessment.feedback}
-        if assessment.misconception_id is not None:
-            diagnosis["misconception_id"] = assessment.misconception_id
+        diagnosis = {"outcome": assessment.outcome}
+        if decision.kind == "worked_example":
+            diagnosis["feedback"] = assessment.feedback
+            if assessment.misconception_id is not None:
+                diagnosis["misconception_id"] = assessment.misconception_id
         target = targets[0]
         prompt = json.dumps({
             "intervention_kind": decision.kind,
@@ -319,7 +373,8 @@ class Tutor:
         }, ensure_ascii=False)
         try:
             attempted = True
-            result = await provider.complete(prompt, system=_SYSTEM, max_tokens=512)
+            system = _SYSTEM if decision.kind == "worked_example" else _SYSTEM + _GUIDANCE_SYSTEM
+            result = await provider.complete(prompt, system=system, max_tokens=512)
         except Exception:
             # The adapter reports safe provider/timeout categories separately.
             return finish(fallback, "provider_error")
@@ -330,7 +385,11 @@ class Tutor:
                                    decision=decision, assessment=assessment, target=target,
                                    expected_next=next_question_id,
                                    private_rubrics=tuple(q.rubric for q in self.catalog.questions.values()),
-                                   preferences=prefs)
+                                   preferences=prefs,
+                                   private_answers=tuple(
+                                       choice.text for q in self.catalog.questions.values()
+                                       if decision.kind != "worked_example" and q.concept_id == decision.concept_id
+                                       for choice in q.choices if choice.id == q.answer_key))
         except TutorJSONError:
             return finish(fallback, "json_error")
         except ValueError as exc:
