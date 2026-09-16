@@ -1,0 +1,437 @@
+@layer components {
+  .onboarding-shell {
+    @apply min-h-dvh bg-surface text-foreground;
+    display: grid;
+    grid-template-columns: 268px minmax(0, 1fr);
+  }
+  .setup-rail {
+    @apply sticky top-0 flex h-dvh flex-col border-r border-border px-7 py-9;
+    background: color-mix(in srgb, var(--teal-light) 20%, var(--background));
+  }
+  .setup-brand {
+    @apply flex w-fit items-center gap-3 font-heading text-xl font-extrabold leading-[1.08] tracking-tight no-underline;
+  }
+  .setup-brand-mark {
+    @apply grid h-11 w-11 shrink-0 place-items-center rounded-[10px_10px_3px_10px] bg-primary text-foreground;
+  }
+  .setup-rail-title {
+    @apply mb-7 mt-14 text-[11px] font-semibold tracking-[.12em] text-muted-foreground;
+  }
+  .setup-steps {
+    @apply m-0 list-none p-0;
+  }
+  .setup-steps li {
+    @apply relative pb-7;
+  }
+  .setup-steps li:not(:last-child)::after {
+    content: "";
+    @apply absolute left-4 top-9 bottom-0 w-px bg-border;
+  }
+  .setup-steps li.is-complete:not(:last-child)::after {
+    @apply bg-primary/50;
+  }
+  .setup-steps button {
+    @apply relative z-1 flex min-h-12 w-full items-start gap-3 rounded-md border-0 bg-transparent py-1 text-left;
+  }
+  .setup-steps button:disabled {
+    opacity: 1;
+  }
+  .step-number {
+    @apply grid size-8 shrink-0 place-items-center rounded-full border border-border bg-surface font-sans text-xs font-semibold text-muted-foreground transition-colors;
+  }
+  .step-copy {
+    @apply block pt-1;
+  }
+  .step-copy > span {
+    @apply block text-sm font-semibold text-muted-foreground;
+  }
+  .step-copy small {
+    @apply mt-1 block text-xs font-normal text-muted-foreground;
+  }
+  .setup-steps .is-current .step-number {
+    @apply border-teal-dark bg-teal-dark text-white;
+  }
+  .setup-steps .is-current .step-copy > span {
+    @apply text-teal-dark;
+  }
+  .setup-steps .is-complete .step-number {
+    @apply border-primary/35 bg-teal-light text-teal-dark;
+  }
+  .setup-steps button:hover .step-copy > span {
+    @apply text-teal-dark;
+  }
+  .setup-rail-bottom {
+    @apply mt-auto pt-8;
+  }
+  .rail-accent {
+    @apply mb-5 block h-1 w-9 rounded-sm bg-sky;
+  }
+  .local-draft-label {
+    @apply mt-7 flex items-center gap-2 border-t border-border pt-5 text-xs leading-5 text-muted-foreground;
+  }
+  .setup-main {
+    @apply flex min-w-0 flex-col;
+  }
+  .setup-topbar {
+    @apply mx-10 flex min-h-19 items-center justify-between gap-3 border-b border-border;
+  }
+  .setup-content {
+    @apply mx-auto w-full max-w-[800px] px-10 pb-9 pt-10;
+  }
+  .setup-eyebrow {
+    @apply mb-3 text-xs font-semibold tracking-[.13em] text-teal-dark;
+  }
+  .setup-heading {
+    @apply m-0 font-heading text-[2.125rem] font-extrabold leading-tight tracking-[-.045em];
+  }
+  .setup-intro {
+    @apply mt-3 max-w-[530px] text-base leading-7 text-muted-foreground;
+  }
+  .setup-section {
+    @apply scroll-mt-8 border-t border-border pt-7;
+    margin-top: 29px;
+  }
+  .setup-section.first-section {
+    @apply border-0 pt-0;
+    margin-top: 33px;
+  }
+  .setup-section-heading {
+    @apply mb-5 flex items-center gap-3;
+  }
+  .setup-section-heading > span:first-child {
+    @apply font-sans text-xs font-medium tabular-nums text-teal-dark;
+  }
+  .setup-section-heading h2 {
+    @apply font-heading text-base font-bold tracking-tight;
+  }
+  .setup-section-heading .optional-label {
+    @apply ml-auto text-xs font-normal text-muted-foreground;
+  }
+  .setup-label {
+    @apply mb-2 block text-sm font-medium text-foreground;
+  }
+  .setup-field-hint {
+    @apply mt-2 text-xs leading-5 text-muted-foreground;
+  }
+  .setup-field-error {
+    @apply mt-2 border-l-2 border-coral pl-2 text-sm leading-6 text-foreground;
+  }
+  .material-dropzone {
+    @apply flex flex-col items-center rounded-lg border border-dashed border-input bg-background/70 px-5 py-6 text-center transition-[background-color,border-color];
+  }
+  .material-dropzone:hover {
+    @apply border-primary;
+  }
+  .material-dropzone:focus-within {
+    @apply border-teal-dark;
+  }
+  .material-dropzone.is-dragging {
+    @apply border-teal-dark bg-teal-light/70 ring-3 ring-primary/15;
+  }
+  .upload-symbol {
+    @apply mb-3 grid size-11 place-items-center rounded-lg bg-teal-light/65 text-teal-dark;
+  }
+  .materials-list {
+    @apply m-0 list-none p-0;
+  }
+  .material-row {
+    @apply flex items-center gap-3 overflow-hidden border-b border-border py-2;
+  }
+  .file-symbol {
+    @apply grid size-9 shrink-0 place-items-center rounded-md bg-sky/10 text-foreground;
+  }
+  .goal-options {
+    @apply grid grid-cols-3 gap-2.5;
+  }
+  .goal-option {
+    @apply relative flex min-h-21 cursor-pointer items-start gap-2.5 rounded-md border border-border bg-surface p-3 transition-colors;
+  }
+  .goal-option:hover {
+    @apply border-primary;
+  }
+  .goal-option.is-selected {
+    @apply border-teal-dark bg-teal-light/35;
+  }
+  .goal-option input {
+    @apply sr-only;
+  }
+  .goal-option:focus-within {
+    @apply outline-2 outline-offset-3 outline-ring;
+  }
+  .goal-radio {
+    @apply mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border border-muted-foreground;
+  }
+  .goal-option.is-selected .goal-radio {
+    @apply border-teal-dark;
+  }
+  .goal-radio > span {
+    @apply size-1.5 rounded-full bg-teal-dark;
+  }
+  .goal-option strong {
+    @apply block text-[13px] font-semibold leading-5;
+  }
+  .goal-option small {
+    @apply mt-1 block text-xs leading-5 text-muted-foreground;
+  }
+  .goal-fields {
+    @apply mt-6 grid grid-cols-2 items-start gap-5;
+  }
+  .goal-fields > div {
+    @apply min-w-0;
+  }
+  .date-input {
+    min-inline-size: 0;
+  }
+  .setup-form-footer {
+    @apply mt-8 flex items-center justify-between gap-4 border-t border-border pt-6;
+  }
+  .draft-disclosure {
+    @apply mt-4 flex items-center justify-end gap-1.5 text-xs leading-5 text-muted-foreground;
+  }
+  .setup-footer {
+    @apply mx-10 mt-auto flex justify-between gap-5 border-t border-border py-5 text-[11px] tracking-wide text-muted-foreground;
+  }
+  .ready-symbol {
+    @apply mb-7 grid size-14 place-items-center rounded-full bg-green/20 text-teal-dark;
+  }
+  .setup-summary {
+    @apply mt-8 border-y border-border;
+  }
+  .summary-course {
+    @apply flex items-center gap-4 border-b border-border py-6;
+  }
+  .summary-course > svg {
+    @apply shrink-0 text-teal-dark;
+  }
+  .summary-course > div {
+    @apply min-w-0;
+  }
+  .summary-details {
+    @apply grid grid-cols-2 gap-x-6 gap-y-6 py-6;
+  }
+  .summary-details dt {
+    @apply text-xs text-muted-foreground;
+  }
+  .summary-details dd {
+    @apply mt-1 text-sm font-medium;
+  }
+  .summary-files {
+    @apply space-y-2 border-t border-border py-4;
+  }
+  .summary-files li {
+    @apply flex items-center gap-2.5 text-sm;
+  }
+  .summary-files svg {
+    @apply text-teal-dark;
+  }
+  .demo-handoff {
+    @apply mt-6 flex gap-3 border-l-2 border-sky bg-sky/5 p-4;
+  }
+  .demo-handoff > svg {
+    @apply mt-0.5 shrink-0 text-teal-dark;
+  }
+  .setup-actions {
+    @apply mt-8 flex items-center justify-between gap-4;
+  }
+  @media (max-width: 1100px) {
+    .onboarding-shell {
+      grid-template-columns: 228px minmax(0, 1fr);
+    }
+    .setup-rail {
+      @apply px-5;
+    }
+    .setup-content {
+      @apply px-8;
+    }
+    .setup-topbar,
+    .setup-footer {
+      @apply mx-8;
+    }
+    .setup-rail-title {
+      @apply text-[10px];
+    }
+    .goal-options {
+      @apply grid-cols-1;
+    }
+    .goal-option {
+      @apply min-h-0 items-center px-4 py-3;
+    }
+    .goal-option > span:last-child {
+      @apply flex w-full items-center justify-between gap-3;
+    }
+    .goal-option small {
+      @apply mt-0;
+    }
+    .goal-radio {
+      @apply mt-0;
+    }
+    .goal-fields {
+      @apply gap-4;
+    }
+    .setup-heading {
+      @apply text-3xl;
+    }
+  }
+  @media (max-width: 740px) {
+    .onboarding-shell {
+      @apply block;
+    }
+    .setup-rail {
+      @apply static h-auto border-r-0 border-b px-6 pb-0 pt-5;
+    }
+    .setup-brand {
+      @apply text-base leading-none;
+    }
+    .setup-brand br {
+      @apply hidden;
+    }
+    .setup-brand-mark {
+      @apply size-8;
+    }
+    .setup-brand-mark svg {
+      @apply size-5;
+    }
+    .setup-rail-title,
+    .setup-rail-bottom,
+    .step-copy small {
+      @apply hidden;
+    }
+    .setup-steps {
+      @apply mt-5 grid grid-cols-4 gap-2;
+    }
+    .setup-steps li {
+      @apply pb-0;
+    }
+    .setup-steps li:not(:last-child)::after {
+      @apply hidden;
+    }
+    .setup-steps button {
+      @apply flex-col items-center gap-1.5 rounded-none px-0 pb-3 pt-0 text-center;
+    }
+    .step-number {
+      @apply size-6 text-[11px];
+    }
+    .step-copy {
+      @apply pt-0;
+    }
+    .step-copy > span {
+      @apply text-[11px] font-medium;
+    }
+    .setup-steps .is-current {
+      @apply border-b-2 border-teal-dark;
+    }
+    .setup-content {
+      @apply px-6 pb-7 pt-8;
+    }
+    .setup-topbar {
+      @apply mx-6 min-h-15;
+    }
+    .setup-footer {
+      @apply mx-6 flex-wrap text-[11px];
+    }
+    .goal-options {
+      @apply grid-cols-3;
+    }
+    .goal-option {
+      @apply min-h-21 items-start gap-2 p-3;
+    }
+    .goal-option > span:last-child {
+      @apply block;
+    }
+    .goal-option small {
+      @apply mt-1;
+    }
+    .goal-radio {
+      @apply mt-0.5;
+    }
+  }
+  @media (max-width: 480px) {
+    .setup-rail {
+      @apply px-4;
+    }
+    .setup-content {
+      @apply px-5 pt-7;
+    }
+    .setup-topbar {
+      @apply mx-5 gap-2;
+    }
+    .setup-topbar .button {
+      @apply px-1 text-xs;
+    }
+    .setup-heading {
+      @apply text-[1.875rem] leading-tight;
+    }
+    .setup-intro {
+      @apply text-sm leading-6;
+    }
+    .setup-section {
+      @apply pt-6;
+      margin-top: 25px;
+    }
+    .setup-section-heading {
+      @apply mb-4;
+    }
+    .goal-options {
+      @apply grid-cols-1;
+    }
+    .goal-option {
+      @apply min-h-0 items-center gap-3 px-3.5 py-3;
+    }
+    .goal-option > span:last-child {
+      @apply flex w-full items-center justify-between gap-3;
+    }
+    .goal-option small {
+      @apply mt-0 max-w-32 text-right;
+    }
+    .goal-radio {
+      @apply mt-0;
+    }
+    .goal-fields {
+      @apply grid-cols-1 gap-5;
+    }
+    .setup-form-footer {
+      @apply flex-col-reverse items-stretch;
+    }
+    .setup-form-footer > div {
+      @apply justify-center;
+    }
+    .draft-disclosure {
+      @apply justify-center text-center;
+    }
+    .draft-disclosure svg {
+      @apply hidden;
+    }
+    .material-dropzone {
+      @apply px-3 py-5;
+    }
+    .material-row {
+      @apply gap-2;
+    }
+    .material-row > span:nth-last-child(2) {
+      @apply sr-only;
+    }
+    .material-row .button {
+      @apply size-9;
+    }
+    .setup-footer {
+      @apply mx-5 flex-col gap-1;
+    }
+    .summary-details {
+      @apply grid-cols-1 gap-4;
+    }
+    .summary-course {
+      @apply gap-3;
+    }
+    .summary-course .button {
+      @apply px-2;
+    }
+    .setup-actions {
+      @apply flex-col-reverse items-stretch;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .onboarding-shell * {
+      transition: none !important;
+    }
+  }
+}

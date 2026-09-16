@@ -4,6 +4,8 @@ The frontend branch redesign retains the two-question G1 demo and the existing A
 
 ## Interaction design
 
+- **Course setup:** the default screen (`#/setup`) is a single form with a navigable progress rail, optional file selection, goal/date/time controls, validation, and an editable review. File handles and setup details remain in tab memory and clear on refresh; no upload, document processing, or study-plan generation is implemented. The explicit practice-demo action opens the existing two-question experience at `#/study`. Returning to setup preserves the draft and practice session.
+
 - **Study desk:** answer → diagnosis and explanation → explicit next-question action → session recap. An unsubmitted selection survives revisiting the previous explanation.
 - **Concept map:** inspect the six API-returned estimates. Connectors group topics, not prerequisites. Selecting a concept does not submit an answer or select a new activity.
 - **Session activity:** review submitted choices, tutor text, and the actual returned stage trace. This journal lives in browser memory and clears on reset.
@@ -21,11 +23,11 @@ Manrope headings and DM Sans body text are bundled locally. Motion handles view 
 
 ### Component provenance
 
-Button, tabs, switch, and collapsible source was retrieved from the official [shadcn/ui registry](https://ui.shadcn.com/r/styles/new-york-v4/button.json) on 2026-09-16. Recipes are customized for this workspace, imports use the existing per-component Radix packages, and `cn` is local. The upstream [MIT license](licenses/shadcn-ui-LICENSE.md) is retained.
+Button, tabs, switch, collapsible, input, and native-select source was retrieved from the official [shadcn/ui registry](https://ui.shadcn.com/r/styles/new-york-v4/button.json) on 2026-09-16. Recipes are customized for this workspace, imports use the existing per-component Radix packages, and `cn` is local. The upstream [MIT license](licenses/shadcn-ui-LICENSE.md) is retained.
 
 ## Checks
 
-- `npm --prefix frontend test`: four component interaction tests covering the full response flow, request payloads, concept exploration, reset and preference isolation, pending/error recovery, and keyboard interaction. Tests use jsdom and mock the HTTP boundary with the shared response fixture; they are not browser layout tests.
+- `npm --prefix frontend test`: nine component interaction tests covering the full response flow, request payloads, concept exploration, reset and preference isolation, pending/error recovery, keyboard interaction, onboarding validation, file selection/removal, and setup-to-study navigation. Tests use jsdom and mock the HTTP boundary with the shared response fixture; they are not browser layout tests.
 - `npm --prefix frontend run build`: TypeScript check and production bundle.
 - `make check` and `make smoke`: existing backend checks, frontend build, and real HTTP smoke.
 

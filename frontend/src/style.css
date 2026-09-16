@@ -1,6 +1,7 @@
 @import "@fontsource-variable/dm-sans";
 @import "@fontsource-variable/manrope";
 @import "tailwindcss";
+@import "./onboarding.css";
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {

@@ -159,7 +159,7 @@ function Trace({ result }: { result: TurnResponse }) {
   );
 }
 
-export function App() {
+export function App({ onEditSetup }: { onEditSetup?: () => void } = {}) {
   const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState<PublicQuestion | null>(null);
   const [concepts, setConcepts] = useState<ConceptEstimate[]>([]);
@@ -266,7 +266,11 @@ export function App() {
           Skip to workspace
         </a>
         <aside className="navigation">
-          <a className="brand" href="/" aria-label="Minds and Machines home">
+          <a
+            className="brand"
+            href={onEditSetup ? "#/setup" : "/"}
+            aria-label="Minds and Machines home"
+          >
             <span className="brand-mark">
               <Waypoints size={24} strokeWidth={1.8} />
             </span>
@@ -338,14 +342,25 @@ export function App() {
               <ChevronRight size={14} />
               <strong>Search & heuristics</strong>
             </div>
-            <Button
-              variant="ghost"
-              onClick={() => void newSession()}
-              disabled={busy}
-            >
-              <RotateCcw size={15} />
-              <span>New session / reset</span>
-            </Button>
+            <div className="flex items-center gap-1 sm:gap-3">
+              {onEditSetup && (
+                <Button
+                  variant="ghost"
+                  onClick={onEditSetup}
+                  className="text-muted-foreground"
+                >
+                  Course setup
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                onClick={() => void newSession()}
+                disabled={busy}
+              >
+                <RotateCcw size={15} />
+                <span>New session / reset</span>
+              </Button>
+            </div>
           </header>
           <main id="workspace" className="workspace" tabIndex={-1}>
             <div className="page-heading">
