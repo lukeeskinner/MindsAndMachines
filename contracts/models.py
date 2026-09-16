@@ -81,10 +81,14 @@ class Decision(Candidate):
     reason: str
 
 
+TeachingSource = Literal["authored", "bedrock", "authored_fallback"]
+
+
 class TeachingResult(Record):
     text: str
     next_question_id: str | None
     fallback: bool
+    teaching_source: TeachingSource = "authored"
 
 
 class HistoryEntry(Record):
@@ -109,6 +113,7 @@ class PublicDecision(Record):
 class TutorResponse(Record):
     text: str
     fallback: bool
+    teaching_source: TeachingSource = "authored"
 
 
 class TurnRequest(Record):
@@ -133,6 +138,7 @@ class TurnResponse(Record):
     decision: PublicDecision | None
     tutor: TutorResponse
     next_question: PublicQuestion | None
-    mode: Literal["dummy"] = "dummy"
-    provider: Literal["fake"] = "fake"
+    # Describe the returned teaching, not the assessor or configured provider.
+    mode: Literal["dummy", "live"] = "dummy"
+    provider: Literal["fake", "bedrock"] = "fake"
     trace: list[str]

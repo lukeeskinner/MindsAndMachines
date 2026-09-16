@@ -17,6 +17,7 @@ class FakeTutor:
             return TeachingResult(
                 text="This two-question demo is complete. Start a new session to replay it.",
                 next_question_id=None, fallback=assessment.outcome == "unclear",
+                teaching_source="authored_fallback" if assessment.outcome == "unclear" else "authored",
             )
         prefs = presentation_preferences
         variant = ("plain_concise" if prefs.plain_language and prefs.concise else
@@ -28,4 +29,5 @@ class FakeTutor:
         fallback = assessment.outcome == "unclear"
         if fallback:
             text = "Let's try another example.\n\n" + text
-        return TeachingResult(text=text, next_question_id=decision.next_question_id, fallback=fallback)
+        return TeachingResult(text=text, next_question_id=decision.next_question_id, fallback=fallback,
+                              teaching_source="authored_fallback" if fallback else "authored")

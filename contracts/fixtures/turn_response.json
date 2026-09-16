@@ -69,7 +69,8 @@
   },
   "tutor": {
     "text": "Admissibility is a global bound: h(n) must not exceed the optimal remaining path cost h*(n). Consistency is a local constraint: h(n) \u2264 c(n,n\u2032) + h(n\u2032) on every edge.\n\nFor example, take S \u2192 A with cost 1 and A \u2192 G with cost 2. Set h(S)=3, h(A)=1 and h(G)=0. All estimates are admissible, but the S \u2192 A edge is inconsistent: 3 > 1 + 1.\n\nWith h(goal)=0, consistency implies admissibility. Admissibility alone does not guarantee consistency. Try checking both conditions on the fresh graph.",
-    "fallback": false
+    "fallback": false,
+    "teaching_source": "authored"
   },
   "next_question": {
     "question_id": "relationship-q02",

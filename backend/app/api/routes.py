@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Header, HTTPException
-from backend.app.agents.coordinator import Coordinator
+from backend.app.agents.coordinator import Coordinator, IntegrationError
 from backend.app.auth.cognito import AuthError, cognito_enabled, verify_id_token
 from backend.app.storage.dynamo import DynamoStore
 from backend.app.storage.memory import MemoryStore, Session
@@ -35,10 +35,13 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
         question = catalog.question(request.question_id)
         if request.answer not in {choice.id for choice in question.choices}:
             raise HTTPException(400, "Choose one of the listed answers.")
-        update, response = await coordinator.run_turn(
-            request, question, session.learner_state, session.history,
-            catalog.candidates, catalog.questions,
-        )
+        try:
+            update, response = await coordinator.run_turn(
+                request, question, session.learner_state, session.history,
+                catalog.candidates, catalog.questions,
+            )
+        except IntegrationError:
+            raise HTTPException(500, "Learning activity configuration error. Start a new session.") from None
         entry = HistoryEntry(question_id=question.question_id,
                              evidence_applied=update.evidence_applied,
                              candidate_id=response.decision.candidate_id if response.decision else None)

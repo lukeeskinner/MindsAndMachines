@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
@@ -23,6 +24,9 @@ def target(response):
 
 class BaselineTests(unittest.TestCase):
     def setUp(self):
+        env = patch.dict(os.environ, {"MODEL_PROVIDER": "fake", "DYNAMODB_TABLE_NAME": ""})
+        env.start()
+        self.addCleanup(env.stop)
         self.client = TestClient(create_app())
 
     def new_session(self, client=None):

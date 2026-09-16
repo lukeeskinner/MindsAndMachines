@@ -1,6 +1,6 @@
-# Minds & Machines — deterministic learning lab
+# Minds & Machines — adaptive learning lab
 
-**G1 is implemented on `codex/baseline` and ready for review.** It is a local, two-question demo with four independently replaceable fakes. No real agents, model/provider calls, backend AWS integration, mathematical updates, policy scoring, backend authentication or persistence are implemented. G2 is not authorized.
+**G2 Tutor runtime integration:** the two-question demo uses FakeAssessor, BayesianLearner, AdaptivePolicy and the existing Tutor. Teaching is deterministic and authored by default; explicit Bedrock configuration enables validated generated prose with reviewed fallback. Real Assessment is not activated. This scoped increment does not authorize deployment or further G2 work.
 
 ## Run locally
 
@@ -42,40 +42,65 @@ The smoke starts/stops its own server on an available loopback port. No separate
 
 1. Start a new session. All six concepts show 50.0%, interval 5.0–95.0%, and zero evidence.
 2. On the relationship question, choose **A: Every admissible heuristic is also consistent**, then **Check answer**.
-3. See an incorrect diagnosis, a scripted **Worked example** and its reason, a tutor explanation, and `FakeAssessor → FakeLearner → FakePolicy → FakeTutor`. Only the relationship concept changes: mean `0.3333333333333333`, interval `[0.0253, 0.7764]`, evidence count 1.
+3. See an incorrect diagnosis, a **Worked example** and its selection reason, and a tutor explanation labeled **Authored teaching** in default local mode. Only the relationship concept changes: mean `0.3333333333333333`, interval `[0.0253, 0.7764]`, evidence count 1.
 4. On the fresh graph question, choose **B: Admissible, but not consistent**, then submit. The same concept becomes mean `0.5`, interval `[0.1354, 0.8646]`, count 2. The two-question demo completes. Other concepts never change.
 5. Select **plain language / explain jargon**, **step-by-step**, and **concise**; click **New session / reset**. The initial question/state return and the checkboxes stay selected.
 6. Repeat A then B. The first tutor response becomes short plain-language numbered steps. Assessment, estimates, intervals, evidence counts, intervention and next question match the first run. Changing a checkbox does not submit an answer or alter a prior response.
 
-The screen rounds percentages to one decimal; the API returns the documented canned values. “I'm not sure yet” uses the single curated fallback without adding evidence. The golden sequence is the demonstrated state progression; other permitted answers have deterministic placeholder behavior and may leave estimates unchanged. This is intentionally not a learning model.
+The screen rounds percentages to one decimal; the API returns Bayesian estimates. “I'm not sure yet” uses reviewed fallback without adding evidence. Teaching alone never increases an estimate.
+
+## Manual live Tutor test
+
+From a developer shell with the workshop's temporary AWS credentials already exported:
+
+```sh
+MODEL_PROVIDER=bedrock AWS_REGION=us-east-1 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0 BEDROCK_TIMEOUT_SECONDS=12 make dev
+```
+
+Open [the learning lab](http://127.0.0.1:5173) and follow the first-answer walkthrough. Accepted Bedrock prose shows **AI-generated teaching**; provider timeout/error or rejected output shows **Reviewed fallback**, with the same policy-selected next question. Completion is authored even in Bedrock mode. `MODEL_PROVIDER=fake` (the default) or `local` never invokes the provider through Tutor. Materials remain local setup and are not sent to Tutor.
+
+The provider deadline defaults to 12 seconds and accepts values above zero up to 15 seconds, leaving margin under the browser's 20-second request timeout. A timed-out SDK thread can finish later, but its result is ignored and cannot update the session. SDK socket deadlines are also set and retries are disabled. No provider switching or whole-turn retries occur. Do not store credentials in repository files. `make check` and `make smoke` use mocked/local providers and do not test live AWS access.
+
+For a live failure diagnosis, stop the existing dev launcher with Ctrl-C and run
+the command above again (the backend does not hot-reload). The backend terminal
+logs `runtime_start` with PID and provider/model configuration, `provider_attempt`,
+`bedrock_converse_started`, `bedrock_response_received` with an allowlisted stop
+reason, and `provider_returned` on success. `provider_failed` distinguishes timeout,
+configuration, missing credentials and allowlisted AWS error codes. `tutor_result`
+reports whether the provider was attempted, the final teaching source and an
+accepted/local/provider/JSON/validation reason. A validation rejection also logs
+an allowlisted rule description. These logs omit credentials, headers, raw
+exceptions, prompts and generated text. Share only these diagnostic lines.
+The public `dummy/fake` values describe authored fallback, so they alone cannot
+establish whether a Bedrock attempt occurred.
 
 ## Runtime boundaries
 
 ```text
 React browser → POST /api/v1/turns → FastAPI route
   → Coordinator → FakeAssessor.assess
-                → FakeLearner.update
-                → FakePolicy.choose
-                → FakeTutor.teach
+                → BayesianLearner.update
+                → AdaptivePolicy.choose
+                → Tutor.teach (authored or validated Bedrock)
   → API-owned in-memory state → public JSON → React
 ```
 
-`backend/app/main.py` is the one composition root. All four interfaces are in `contracts/interfaces.py`; shared records are in `contracts/models.py`, the small frontend counterpart is `contracts/api.ts`, and the first golden response is in `contracts/fixtures/turn_response.json`. The replacement test substitutes each seam independently. Only FakeTutor receives presentation preferences. Completion also passes through FakeTutor with a null decision and a fixed message.
+`backend/app/main.py` is the one composition root. All four interfaces are in `contracts/interfaces.py`; shared records are in `contracts/models.py`, the small frontend counterpart is `contracts/api.ts`, and the first golden response is in `contracts/fixtures/turn_response.json`. The replacement test substitutes each seam independently. Only Teaching receives presentation preferences. Completion passes through Tutor with a null decision and a fixed message. FakeTutor remains available for tests and authored rendering.
 
 ## Repository map
 
 - `frontend/`: React screen, accessible controls and styles; no hard-coded API responses.
 - `backend/app/api/`, `storage/`, `main.py`: request validation, in-memory state and wiring.
 - `backend/app/agents/`: coordinator and FakeAssessor.
-- `backend/app/learner/`, `policy/`, `teaching/`: the three other fakes and local content loader.
+- `backend/app/learner/`, `policy/`, `teaching/`: real implementations, replaceable fakes and local content loader.
 - `contracts/`: approved types/interfaces and example payload; no code generation.
 - `content/demo.json`: six concept IDs, two questions and one teaching example in presentation variants.
-- `tests/integration/test_loop.py`: five targeted tests, including all four seam replacements.
+- `tests/integration/`: golden loop, seam replacements and mocked Bedrock runtime/failure tests.
 - `scripts/`: setup, dev process launcher, and real HTTP smoke.
 
 Full relevant tree, files changed, verification and limitations: [G1 report](docs/G1_REPORT.md).
 
-## Git and team status
+## Historical G1 handoff
 
 Verified repository: [lukeeskinner/MindsAndMachines](https://github.com/lukeeskinner/MindsAndMachines). The user bootstrapped the empty remote with approved Phase 1 documentation at `5ecaecfdfa0484c8da18ceff9c6646a2b258f1ea`. The remote default is main. This implementation builds on that history on `codex/baseline`; main is not merged, rewritten or pushed by this task.
 

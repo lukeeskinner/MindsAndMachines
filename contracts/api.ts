@@ -41,9 +41,13 @@ export interface TurnResponse {
     kind: 'diagnostic_probe' | 'worked_example' | 'socratic_hint';
     reason: string;
   } | null;
-  tutor: { text: string; fallback: boolean };
+  tutor: {
+    text: string;
+    fallback: boolean;
+    teaching_source: 'authored' | 'bedrock' | 'authored_fallback';
+  };
   next_question: PublicQuestion | null;
-  mode: 'dummy';
-  provider: 'fake';
+  mode: 'dummy' | 'live';
+  provider: 'fake' | 'bedrock';
   trace: string[];
 }
