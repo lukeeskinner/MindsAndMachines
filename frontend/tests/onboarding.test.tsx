@@ -24,6 +24,12 @@ beforeEach(() => {
   window.sessionStorage.clear();
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   Element.prototype.scrollIntoView = vi.fn();
+  // These tests exercise the demo-only local sign-in form, which only
+  // renders when Cognito isn't configured -- force that regardless of a
+  // developer's local frontend/.env.local (CONTRACTS.md: unconfigured
+  // Cognito must not change this fallback UI).
+  vi.stubEnv("VITE_COGNITO_DOMAIN", "");
+  vi.stubEnv("VITE_COGNITO_CLIENT_ID", "");
   fetchMock = vi
     .fn()
     .mockResolvedValue({
@@ -39,6 +45,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   window.sessionStorage.clear();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
