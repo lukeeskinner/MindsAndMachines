@@ -16,8 +16,23 @@ export interface ConceptEstimate {
   interval90: { lower: number; upper: number };
   evidence_count: number;
 }
+export interface PublicCourseConcept {
+  concept_id: string;
+  display_name: string;
+}
+export interface PublicCourse {
+  course_id: string;
+  title: string;
+  concepts: PublicCourseConcept[];
+  source_filenames: string[];
+  question_count: number;
+}
+export interface SessionRequest {
+  course_id?: string | null;
+}
 export interface SessionResponse {
   session_id: string;
+  course_id: string | null;
   question: PublicQuestion;
   concepts: ConceptEstimate[];
 }

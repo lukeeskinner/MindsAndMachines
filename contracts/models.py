@@ -27,6 +27,19 @@ class Question(PublicQuestion):
         return PublicQuestion(**self.model_dump(exclude={"answer_key", "rubric"}))
 
 
+class PublicCourseConcept(Record):
+    concept_id: str
+    display_name: str
+
+
+class PublicCourse(Record):
+    course_id: str
+    title: str
+    concepts: list[PublicCourseConcept]
+    source_filenames: list[str]
+    question_count: int
+
+
 class Assessment(Record):
     outcome: Literal["correct", "incorrect", "unclear"]
     concept_id: str
@@ -125,8 +138,13 @@ class TurnRequest(Record):
     )
 
 
+class SessionRequest(Record):
+    course_id: str | None = Field(default=None, min_length=1)
+
+
 class SessionResponse(Record):
     session_id: str
+    course_id: str | None = None
     question: PublicQuestion
     concepts: list[ConceptEstimate]
 
