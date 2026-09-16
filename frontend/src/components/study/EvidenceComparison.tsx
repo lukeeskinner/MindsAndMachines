@@ -1,5 +1,5 @@
 import type { ConceptEstimate } from "../../../../contracts/api";
-import { conceptName, percent } from "./model";
+import { conceptName, percent, intervalWidth } from "./model";
 
 // Compare public snapshots for display; the server owns every estimate and count.
 export function EvidenceComparison({
@@ -47,6 +47,10 @@ export function EvidenceComparison({
                 {percent(previous.interval90.upper)} →{" "}
                 {percent(current.interval90.lower)}–
                 {percent(current.interval90.upper)}
+              </dd>
+              <dd>
+                Interval width: {intervalWidth(previous)} →{" "}
+                {intervalWidth(current)} percentage points
               </dd>
             </div>
           ))}

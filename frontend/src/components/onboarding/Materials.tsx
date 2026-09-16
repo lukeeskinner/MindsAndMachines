@@ -74,7 +74,7 @@ export function Materials({
         </span>
         <div>
           <p className="font-heading text-base font-semibold text-foreground">
-            {dragging ? "Drop them here." : "Drop in a little context."}
+            {dragging ? "Drop them here." : "Keep course files together."}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             Lecture notes, slides, homework, or past papers.
@@ -166,7 +166,8 @@ export function Materials({
         </div>
       )}
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
-        Files stay in this tab. They haven’t been uploaded or processed.
+        Files stay in this tab. They haven’t been uploaded or processed, and are
+        not supplied to the tutor.
       </p>
       <span className="sr-only" role="status">
         {announcement}

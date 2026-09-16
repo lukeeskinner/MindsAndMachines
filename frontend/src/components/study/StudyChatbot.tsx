@@ -13,6 +13,7 @@ import type {
   PublicQuestion,
 } from "../../../../contracts/api";
 import { Button, Disclosure, Scene } from "../ui/primitives";
+import { TeachingSource } from "./TeachingSource";
 import { TeachingPreferences } from "./TeachingPreferences";
 import { conceptName, percent, type StudyEntry } from "./model";
 
@@ -106,18 +107,13 @@ export function StudyChatbot({
                       <div className="chat-tutor-message">
                         <div className="chat-speaker">
                           <BookOpen size={14} aria-hidden="true" />
-                          Study tutor <span>Scripted response</span>
+                          Study tutor <TeachingSource result={entry.result} />
                         </div>
                         <p
                           className={`chat-assessment chat-assessment-${entry.result.assessment.outcome}`}
                         >
                           {entry.result.assessment.feedback}
                         </p>
-                        {entry.result.tutor.fallback && (
-                          <span className="tag tag-fallback">
-                            Scripted fallback
-                          </span>
-                        )}
                         <div className="chat-response">
                           {entry.result.tutor.text
                             .split(/\n\s*\n/)

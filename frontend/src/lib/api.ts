@@ -1,6 +1,16 @@
-export async function post<T>(path: string, body: object, authHeader?: string): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (authHeader) headers.Authorization = authHeader;
+import { getIdToken } from "../auth/cognito";
+
+export async function post<T>(path: string, body: object): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  // Creation and reset use the same supported authenticated route. Read the
+  // current token for each request; keep existing token storage unchanged.
+  // /turns does not yet verify Authorization or enforce session ownership.
+  if (path === "sessions") {
+    const token = getIdToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
   const response = await fetch(`/api/v1/${path}`, {
     method: "POST",
     headers,

@@ -9,6 +9,7 @@ import {
   CircleHelp,
   GitBranch,
   History,
+  House,
   Info,
   Layers3,
   LoaderCircle,
@@ -38,14 +39,21 @@ import {
 } from "./components/ui/primitives";
 import { motion, MotionConfig, useReducedMotion } from "motion/react";
 import { post } from "./lib/api";
-import { getIdToken } from "./auth/cognito";
+import { AnswerImpact } from "./components/study/AnswerImpact";
+import {
+  TeachingSource,
+  teachingLabel,
+} from "./components/study/TeachingSource";
 import { StudyChatbot } from "./components/study/StudyChatbot";
+import { StudyOverview } from "./components/study/StudyOverview";
 import { MaterialsWorkspace } from "./components/study/MaterialsWorkspace";
 import { initialDraft, type CourseDraft } from "./components/onboarding/model";
 import { EvidenceComparison } from "./components/study/EvidenceComparison";
 import { TeachingPreferences } from "./components/study/TeachingPreferences";
 import {
   conceptNames as names,
+  intervalWidth,
+  activityNames,
   type StudyEntry,
 } from "./components/study/model";
 
@@ -57,16 +65,11 @@ const shortNames: Record<string, string> = {
   consistency: "Consistency",
   admissibility_vs_consistency: "The connection",
 };
-const stages: Record<string, [string, string]> = {
-  assess: ["Assessment", "FakeAssessor"],
-  update: ["Concept estimate", "BayesianLearner"],
-  select: ["Next activity", "AdaptivePolicy"],
-  teach: ["Teaching response", "FakeTutor"],
-};
-const activityNames = {
-  worked_example: "Worked example",
-  diagnostic_probe: "Diagnostic probe",
-  socratic_hint: "Socratic hint",
+const stages: Record<string, string> = {
+  assess: "Assessment",
+  update: "Concept estimate",
+  select: "Next activity",
+  teach: "Teaching response",
 };
 const focusConcept = "admissibility_vs_consistency";
 const groups = [
@@ -133,16 +136,17 @@ function Trace({ result }: { result: TurnResponse }) {
   return (
     <Disclosure title="Behind this response">
       <p className="subtle">
-        Deterministic mode · {result.provider} provider. Bayesian estimates and
-        adaptive selection; assessment and teaching remain fake. No live AI agents.
+        {teachingLabel(result)}. Returned mode: {result.mode}; provider:{" "}
+        {result.provider}. These are the stages reported by the API, not proof
+        of live AI generation.
       </p>
       <ol className="trace-list">
         {result.trace.map((stage, index) => (
           <li key={`${stage}-${index}`}>
             <Check size={14} aria-hidden="true" />
             <span>
-              {stages[stage]?.[0] ?? stage}
-              <small>{stages[stage]?.[1] ?? stage}</small>
+              {stages[stage] ?? stage}
+              <small>{stage}</small>
             </span>
           </li>
         ))}
@@ -190,8 +194,7 @@ export function App({
     setBusy(true);
     setError("");
     try {
-      const token = getIdToken();
-      const result = await post<SessionResponse>("sessions", {}, token ? `Bearer ${token}` : undefined);
+      const result = await post<SessionResponse>("sessions", {});
       setSessionId(result.session_id);
       setQuestion(result.question);
       setConcepts(result.concepts);
@@ -271,7 +274,7 @@ export function App({
       <Tabs
         value={view}
         onValueChange={setView}
-        className="app-shell workspace-with-chat"
+        className="app-shell workspace-with-chat soft-workspace"
         orientation={orientation}
       >
         <a className="skip-link" href="#workspace">
@@ -302,6 +305,14 @@ export function App({
             </span>
           </div>
           <TabsList className="navigation-list" aria-label="Learning workspace">
+            <TabsTrigger
+              value="overview"
+              className="nav-item"
+              aria-label="Home"
+            >
+              <House size={19} />
+              Home
+            </TabsTrigger>
             <TabsTrigger
               value="study"
               className="nav-item"
@@ -373,12 +384,12 @@ export function App({
               <ChevronRight size={14} />
               <strong>Search & heuristics</strong>
             </div>
-            <div className="flex items-center gap-1 sm:gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-1 sm:gap-3">
               {onEditSetup && (
                 <Button
                   variant="ghost"
                   onClick={onEditSetup}
-                  className="text-muted-foreground"
+                  className="px-2 text-muted-foreground sm:px-4"
                 >
                   Course setup
                 </Button>
@@ -387,6 +398,7 @@ export function App({
                 variant="ghost"
                 onClick={() => void newSession()}
                 disabled={busy}
+                className="px-2 sm:px-4"
               >
                 <RotateCcw size={15} />
                 <span>New session / reset</span>
@@ -398,26 +410,30 @@ export function App({
               <div>
                 <p className="eyebrow">THE LEARNING LAB</p>
                 <h1>
-                  {view === "study"
-                    ? "Make the connection."
-                    : view === "chatbot"
-                      ? "Chatbot"
-                      : view === "map"
-                        ? "See the bigger picture."
-                        : view === "materials"
-                          ? "Your course, in one place."
-                          : "Follow your thinking."}
+                  {view === "overview"
+                    ? "A little progress starts here."
+                    : view === "study"
+                      ? "Make the connection."
+                      : view === "chatbot"
+                        ? "Chatbot"
+                        : view === "map"
+                          ? "See the bigger picture."
+                          : view === "materials"
+                            ? "Your course, in one place."
+                            : "Follow your thinking."}
                 </h1>
                 <p>
-                  {view === "study"
-                    ? "A little practice. A clearer understanding."
-                    : view === "chatbot"
-                      ? "Your study context, answers, and explanations together."
-                      : view === "map"
-                        ? "Six concepts, with room for uncertainty."
-                        : view === "materials"
-                          ? "Keep your notes and study goals close at hand."
-                          : "Your answers, feedback, and next steps in one place."}
+                  {view === "overview"
+                    ? "Your understanding, your evidence, and a clear next step."
+                    : view === "study"
+                      ? "A little practice. A clearer understanding."
+                      : view === "chatbot"
+                        ? "Your study context, answers, and explanations together."
+                        : view === "map"
+                          ? "Six concepts, with room for uncertainty."
+                          : view === "materials"
+                            ? "Keep your notes and study goals close at hand."
+                            : "Your answers, feedback, and next steps in one place."}
                 </p>
               </div>
               {view !== "materials" && (
@@ -461,6 +477,25 @@ export function App({
             )}
             <div className="desk-layout" data-view={view}>
               <div className="primary-column">
+                <TabsContent
+                  value="overview"
+                  className="view-panel overview-page"
+                >
+                  <StudyOverview
+                    concepts={concepts}
+                    question={question}
+                    entries={entries}
+                    draft={courseDraft}
+                    busy={busy}
+                    error={error}
+                    onStudy={() => setView("study")}
+                    onConcept={(id) => {
+                      setSelectedConcept(id);
+                      setView("map");
+                    }}
+                    onMaterials={() => setView("materials")}
+                  />
+                </TabsContent>
                 <TabsContent
                   value="materials"
                   className="view-panel materials-page"
@@ -558,9 +593,7 @@ export function App({
                             ? "One loop, a little more clarity."
                             : "Here’s the useful distinction."}
                         </h2>
-                        <p className="assessment-feedback">
-                          {review.result.assessment.feedback}
-                        </p>
+                        <AnswerImpact entry={review} />
                         <Disclosure title="Review your answer">
                           <p>{review.question.prompt}</p>
                           <div className="submitted-answer">
@@ -580,6 +613,7 @@ export function App({
                                 ? activityNames[review.result.decision.kind]
                                 : "Tutor reflection"}
                             </h3>
+                            <TeachingSource result={review.result} />
                             <p>Your explanation is ready in Chatbot.</p>
                           </div>
                           <Button variant="secondary" onClick={openChatbot}>
@@ -587,24 +621,12 @@ export function App({
                             <ArrowRight size={16} />
                           </Button>
                         </div>
-                        <div className="decision-strip">
-                          <GitBranch size={19} />
-                          <div>
-                            <h3>
-                              {complete ? "Why stop here?" : "Why this next?"}
-                            </h3>
-                            <p>
-                              {review.result.decision?.reason ??
-                                "You’ve reached the end of this two-question demo. Review the evidence or reset for another pass."}
-                            </p>
-                          </div>
-                        </div>
                         <Trace result={review.result} />
                         <div className="surface-footer">
                           <span>
                             {complete
                               ? "Practice completed. Estimates remain experimental."
-                              : "Apply the distinction to a different graph."}
+                              : "Read the explanation, then try the next question."}
                           </span>
                           <Button onClick={() => setReviewing(false)}>
                             {complete
@@ -832,28 +854,61 @@ export function App({
                       </div>
                     </div>
                     {selected && (
-                      <div className="map-selection" key={selectedConcept}>
-                        <div>
-                          <span className="eyebrow">SELECTED CONCEPT</span>
-                          <h3>{names[selectedConcept]}</h3>
-                          <p>
-                            {selected.evidence_count
-                              ? `${selected.evidence_count} accepted observations in this session.`
-                              : "No answers have supplied evidence for this concept yet."}
+                      <section
+                        className="map-evidence"
+                        aria-label="Selected concept evidence"
+                        key={selectedConcept}
+                      >
+                        <div className="map-selection">
+                          <div>
+                            <span className="eyebrow">SELECTED CONCEPT</span>
+                            <h3>{names[selectedConcept]}</h3>
+                            <p>
+                              {selected.evidence_count
+                                ? `${selected.evidence_count} accepted observations in this session.`
+                                : "No answers have supplied evidence for this concept yet."}
+                            </p>
+                          </div>
+                          <div className="map-selection-value">
+                            <strong>{pct(selected.mean)}</strong>
+                            <span>understanding estimate</span>
+                          </div>
+                        </div>
+                        <dl className="concept-evidence-values">
+                          <div>
+                            <dt>90% uncertainty range</dt>
+                            <dd>
+                              {pct(selected.interval90.lower)} –{" "}
+                              {pct(selected.interval90.upper)}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Interval width</dt>
+                            <dd>{intervalWidth(selected)} percentage points</dd>
+                          </div>
+                        </dl>
+                        <p className="impact-note">
+                          Experimental predicted success on comparable unaided
+                          questions.{" "}
+                          {selected.evidence_count === 0 &&
+                            "No evidence yet; this is a starting estimate, not a grade."}
+                        </p>
+                        {!entries.some(
+                          (entry) =>
+                            entry.question.concept_id === selectedConcept,
+                        ) && (
+                          <p className="impact-note">
+                            No responses for this concept in this session.
                           </p>
-                        </div>
-                        <div className="map-selection-value">
-                          <strong>{pct(selected.mean)}</strong>
-                          <span>mastery estimate</span>
-                        </div>
-                      </div>
+                        )}
+                      </section>
                     )}
                     <div className="map-footer">
                       <Info size={16} />
                       <p>
-                        Estimates use Bayesian updates. A 50% starting
-                        estimate with no evidence does not mean you know half
-                        the material.
+                        Estimates use Bayesian updates. A 50% starting estimate
+                        with no evidence does not mean you know half the
+                        material.
                       </p>
                     </div>
                     {entries.some(
@@ -887,6 +942,7 @@ export function App({
                                       (choice) => choice.id === entry.answer,
                                     )?.text ?? entry.answer}
                                   </p>
+                                  <TeachingSource result={entry.result} />
                                   <p>{entry.result.tutor.text}</p>
                                 </Disclosure>
                               </li>
@@ -938,6 +994,7 @@ export function App({
                                 {entry.result.assessment.feedback}
                               </p>
                               <Disclosure title="Read the tutor response">
+                                <TeachingSource result={entry.result} />
                                 <div className="tutor-text">
                                   {entry.result.tutor.text}
                                 </div>
@@ -975,7 +1032,11 @@ export function App({
               </div>
               <aside
                 className="inspector"
-                hidden={view === "chatbot" || view === "materials"}
+                hidden={
+                  view === "overview" ||
+                  view === "chatbot" ||
+                  view === "materials"
+                }
                 aria-label="Concept estimates and teaching preferences"
               >
                 <section className="knowledge-panel">
@@ -1027,6 +1088,10 @@ export function App({
                             : "observations"}
                         </span>
                       </div>
+                      <p className="detail-estimate">
+                        Understanding estimate:{" "}
+                        <strong>{pct(selected.mean)}</strong>
+                      </p>
                       <Estimate concept={selected} />
                       <p>
                         {selected.evidence_count === 0
@@ -1071,7 +1136,7 @@ export function App({
           {busy
             ? "Loading, please wait."
             : reviewing && latest
-              ? `Answer ${entries.length}: ${latest.result.assessment.outcome}. Feedback is ready.`
+              ? `Answer ${entries.length}: ${latest.result.assessment.outcome}. ${teachingLabel(latest.result)}. Feedback and before/after evidence are ready.`
               : ""}
         </span>
       </Tabs>

@@ -169,7 +169,7 @@ describe("course onboarding", () => {
     ).toBeNull();
     fireEvent.drop(
       screen
-        .getByText("Drop in a little context.")
+        .getByText("Keep course files together.")
         .closest(".material-dropzone")!,
       { dataTransfer: { files: [file] } },
     );
