@@ -66,7 +66,10 @@ class CoordinatorAuthorityTests(unittest.IsolatedAsyncioTestCase):
             await self.run_turn()
 
     async def test_unknown_policy_question_fails_before_teaching(self):
-        del self.catalog.questions["relationship-q02"]
+        assessment = await self.coordinator.assessor.assess(self.question, self.request.answer)
+        update = self.learner.update(self.initial.state, assessment, [])
+        decision = self.coordinator.policy.choose(update.concepts, assessment, self.catalog.candidates, [])
+        del self.catalog.questions[decision.next_question_id]
         with self.assertRaisesRegex(IntegrationError, "unknown next question"):
             await self.run_turn()
         self.teaching.teach.assert_not_called()

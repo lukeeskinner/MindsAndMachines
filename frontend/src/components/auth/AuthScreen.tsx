@@ -195,7 +195,7 @@ export function AuthScreen({
             </li>
             <li>
               <CheckCircle2 size={17} />
-              <span>Explore two guided practice questions</span>
+              <span>Explore guided practice questions</span>
             </li>
           </ol>
         </aside>

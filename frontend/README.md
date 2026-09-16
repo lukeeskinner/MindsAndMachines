@@ -1,6 +1,6 @@
 # Learning workspace
 
-The frontend branch redesign retains the two-question G1 demo and the existing API contracts. Run `make dev` from the repository root, then open http://127.0.0.1:5173.
+The frontend uses the adaptive practice demo and the existing API contracts. Run `make dev` from the repository root, then open http://127.0.0.1:5173.
 
 ## Interaction design
 
@@ -12,7 +12,7 @@ The frontend branch redesign retains the two-question G1 demo and the existing A
 - **Entry flow:** when configured, `#/login` links to Cognito Hosted UI using the existing Authorization Code + PKCE flow. Without frontend Cognito configuration it offers a clearly labeled local preview. Sign-out clears the local course draft and unmounts the study session. Rendering the hosted-login button or passing mocked header tests does not verify live authentication or backend session ownership.
 - **Evidence review:** the recap compares public snapshots returned by the server, including uncertainty and evidence counts. The concept map shows submitted responses for the selected concept. Untouched concepts emphasize the absence of evidence.
 
-- **Course setup:** the default screen (`#/setup`) is a single form with a navigable progress rail, optional file selection, goal/date/time controls, validation, and an editable review. File handles and setup details remain in tab memory and clear on refresh; no upload, document processing, or study-plan generation is implemented. The explicit practice-demo action opens the existing two-question experience at `#/study`. Returning to setup preserves the draft and practice session.
+- **Course setup:** the default screen (`#/setup`) is a single form with a navigable progress rail, optional file selection, goal/date/time controls, validation, and an editable review. File handles and setup details remain in tab memory and clear on refresh; no upload, document processing, or study-plan generation is implemented. The explicit practice-demo action opens the adaptive practice experience at `#/study`. Returning to setup preserves the draft and practice session.
 
 - **Study desk:** answer → diagnosis and explanation → explicit next-question action → session recap. An unsubmitted selection survives revisiting the previous explanation.
 - **Concept map:** inspect the six API-returned estimates. Connectors group topics, not prerequisites. Selecting a concept does not submit an answer or select a new activity.

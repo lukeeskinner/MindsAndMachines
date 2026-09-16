@@ -52,7 +52,8 @@ class InterventionTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(provider.stop)
 
     def select(self, kind):
-        candidate = next(c for c in self.catalog.candidates if c.kind == kind)
+        candidate = next(c for c in self.catalog.candidates
+                         if c.candidate_id == (f"test-{kind}" if kind in KINDS else "relationship-example"))
         self.decision = Decision(**candidate.model_dump(), reason="Trusted policy selection")
         self.complete.reset_mock(return_value=True, side_effect=True)
         self.respond(GENERATED[kind] if kind in KINDS else

@@ -47,21 +47,24 @@ class RealAssessorTests(unittest.IsolatedAsyncioTestCase):
         for question in self.catalog.questions.values():
             with self.subTest(question=question.question_id):
                 self.complete.reset_mock()
-                result = await self.assessor.assess(question, "b")
+                result = await self.assessor.assess(question, question.answer_key)
                 self.assertEqual((result.outcome, result.score, result.concept_id),
                                  ("correct", 1, question.concept_id))
                 self.assertIsNone(result.misconception_id)
                 self.assertEqual(result.feedback, self.feedback)
                 self.complete.assert_awaited_once()
 
-    async def test_incorrect_mc_accepts_known_diagnosis(self):
+    async def test_incorrect_mc_accepts_only_reviewed_question_diagnoses(self):
         for question in self.catalog.questions.values():
             with self.subTest(question=question.question_id):
                 self.complete.reset_mock()
-                result = await self.assessor.assess(question, "a")
+                wrong = next(c.id for c in question.choices if c.id not in {question.answer_key, "unsure"})
+                result = await self.assessor.assess(question, wrong)
                 self.assertEqual((result.outcome, result.score, result.concept_id),
                                  ("incorrect", 0, question.concept_id))
-                self.assertEqual(result.misconception_id, "admissible_means_consistent")
+                expected_diagnosis = ("admissible_means_consistent"
+                                      if question.question_id in {"relationship-q01", "relationship-q02"} else None)
+                self.assertEqual(result.misconception_id, expected_diagnosis)
                 self.assertEqual(result.feedback, self.feedback)
                 self.complete.assert_awaited_once()
 

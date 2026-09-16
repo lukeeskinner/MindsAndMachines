@@ -15,7 +15,7 @@ class FakeTutor:
                     presentation_preferences: LearnerPresentationPreferences) -> TeachingResult:
         if decision is None:
             return TeachingResult(
-                text="This two-question demo is complete. Start a new session to replay it.",
+                text="This demo is complete. Start a new session to replay it.",
                 next_question_id=None, fallback=assessment.outcome == "unclear",
                 teaching_source="authored_fallback" if assessment.outcome == "unclear" else "authored",
             )

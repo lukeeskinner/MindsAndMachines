@@ -1,6 +1,6 @@
 # Minds & Machines — adaptive learning lab
 
-**G2 Tutor runtime integration:** the two-question demo uses FakeAssessor, BayesianLearner, AdaptivePolicy and the existing Tutor. Teaching is deterministic and authored by default; explicit Bedrock configuration enables validated generated prose with reviewed fallback. Real Assessment is not activated. This scoped increment does not authorize deployment or further G2 work.
+**G2 Tutor runtime integration:** the adaptive demo uses FakeAssessor, BayesianLearner, AdaptivePolicy and the existing Tutor. Teaching is deterministic and authored by default; explicit Bedrock configuration enables validated generated prose with reviewed fallback. Real Assessment is not activated. This scoped increment does not authorize deployment or further G2 work.
 
 ## Run locally
 
@@ -42,10 +42,11 @@ The smoke starts/stops its own server on an available loopback port. No separate
 
 1. Start a new session. All six concepts show 50.0%, interval 5.0–95.0%, and zero evidence.
 2. On the relationship question, choose **A: Every admissible heuristic is also consistent**, then **Check answer**.
-3. See an incorrect diagnosis, a **Worked example** and its selection reason, and a tutor explanation labeled **Authored teaching** in default local mode. Only the relationship concept changes: mean `0.3333333333333333`, interval `[0.0253, 0.7764]`, evidence count 1.
-4. On the fresh graph question, choose **B: Admissible, but not consistent**, then submit. The same concept becomes mean `0.5`, interval `[0.1354, 0.8646]`, count 2. The two-question demo completes. Other concepts never change.
-5. Select **plain language / explain jargon**, **step-by-step**, and **concise**; click **New session / reset**. The initial question/state return and the checkboxes stay selected.
-6. Repeat A then B. The first tutor response becomes short plain-language numbered steps. Assessment, estimates, intervals, evidence counts, intervention and next question match the first run. Changing a checkbox does not submit an answer or alter a prior response.
+3. See an incorrect diagnosis, a **Socratic hint** and its selection reason, and guidance labeled **Authored teaching** in default local mode. Only the relationship concept changes: mean `0.3333333333333333`, interval `[0.0253, 0.7764]`, evidence count 1.
+4. On the graph with h(S)=6 and h(A)=4, choose **A: Both admissible and consistent**, then submit. The same concept becomes mean `0.5`, interval `[0.1354, 0.8646]`, count 2. A **Diagnostic probe** introduces a fresh graph.
+5. On the graph with h(S)=5 and h(A)=1, choose **A: Admissible, but not consistent**. A **Worked example** introduces the original transfer question. Choose **B: Admissible, but not consistent** on that question to complete the demo. The relationship concept now has four observations; other concepts never change.
+6. Select **plain language / explain jargon**, **step-by-step**, and **concise**; click **New session / reset**. The initial question/state return and the checkboxes stay selected.
+7. Repeat A, A, A, then B. Teaching becomes short plain-language numbered steps. Assessment, estimates, intervals, evidence counts, interventions and next questions match the first run. Changing a checkbox does not submit an answer or alter a prior response.
 
 The screen rounds percentages to one decimal; the API returns Bayesian estimates. “I'm not sure yet” uses reviewed fallback without adding evidence. Teaching alone never increases an estimate.
 
@@ -94,7 +95,7 @@ React browser → POST /api/v1/turns → FastAPI route
 - `backend/app/agents/`: coordinator and FakeAssessor.
 - `backend/app/learner/`, `policy/`, `teaching/`: real implementations, replaceable fakes and local content loader.
 - `contracts/`: approved types/interfaces and example payload; no code generation.
-- `content/demo.json`: six concept IDs, two questions and one teaching example in presentation variants.
+- `content/demo.json`: six concept IDs, four questions and three authored interventions in presentation variants.
 - `tests/integration/`: golden loop, seam replacements and mocked Bedrock runtime/failure tests.
 - `scripts/`: setup, dev process launcher, and real HTTP smoke.
 

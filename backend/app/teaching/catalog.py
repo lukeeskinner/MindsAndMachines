@@ -1,4 +1,4 @@
-"""Two authored questions and one example, loaded locally. No retrieval service."""
+"""Authored questions and intervention content, loaded locally. No retrieval service."""
 import json
 from pathlib import Path
 from contracts.models import Candidate, Question
