@@ -1,6 +1,6 @@
 # Architecture proposal
 
-Status: the user supports the core design; the simplified Phase 2 implementation plan still awaits explicit approval. G1 scope is defined only by PHASE2.md; the real agents, mathematics and full demo behavior below are post-G1 targets. The brief and brainstorm image describe the product vision, not mandatory components. Hackathon length and exact AWS judging requirements are unknown; sequence work by acceptance gates, not an assumed number of days.
+Status: core architecture and G1 were approved. The deterministic G1 implementation is on `codex/baseline` for review; G2 remains unauthorized. G1 scope is defined only by PHASE2.md; the real agents, mathematics and full demo behavior below are post-G1 targets. The brief and brainstorm image describe the product vision, not mandatory components. Hackathon length and exact AWS judging requirements are unknown; sequence work by acceptance gates, not an assumed number of days.
 
 ## Product and demo scope
 

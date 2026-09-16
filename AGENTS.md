@@ -4,7 +4,7 @@
 
 Build for hackathon speed: a visible adaptive tutor, small replaceable modules and continuous integration. Read [README.md](README.md), [architecture](docs/ARCHITECTURE.md), [contracts](docs/CONTRACTS.md), [ownership](docs/OWNERSHIP.md), [workstreams](docs/WORKSTREAMS.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before edits.
 
-**Current work is documentation revision only. The user supports the core architecture but has not approved Phase 2. Do not implement the app, dummy pipeline, math, model calls or deployment, or create branches yet.** The authorized architect may revise this documentation package.
+**G1 implementation is authorized on `codex/baseline` only. The deterministic baseline is ready for review; G2 is not authorized. Do not merge into main, push directly to main, deploy, add real model/provider calls or create feature branches.** This remains one primary implementation session controlled by SWE1.
 
 When G1 is authorized, all five teammates participate through **one baseline branch and one primary coding-agent implementation session controlled by SWE1**. No independent implementation sessions, delegated coding agents or five feature branches during G1. The primary session may edit every path needed for that slice. Separate feature work begins only after G1 acceptance; then use the ownership map.
 

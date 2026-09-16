@@ -1,13 +1,13 @@
 # Current work and gates
 
-Status: **the user supports the core product, module boundaries, math, local-first AWS approach, ownership and demo concept. The implementation plan has been simplified; Phase 2 is still not approved.** No application, checks or deployment exist. GitHub URL and real team handles remain unconfirmed.
+Status: **G1 is implemented and technically verified on `codex/baseline`; awaiting user/team review. G2 is not authorized.** GitHub was verified at `https://github.com/lukeeskinner/MindsAndMachines.git`, with main at `5ecaecf`. No push, merge or deployment is part of this implementation. Real team handles/review remain unconfirmed.
 
 ## Gate sequence
 
 | Gate | Work and exit evidence | Current state |
 | --- | --- | --- |
-| G0 | Review the simplified plan; obtain explicit Phase 2 approval and reconcile the existing GitHub repository | Awaiting Phase 2 approval and remote information |
-| G1 | One browser/API loop through four replaceable fakes, new-session/reset, small check and core smoke; team accepts the baseline main SHA | Not started |
+| G0 | Review the simplified plan; obtain explicit Phase 2 approval and reconcile the existing GitHub repository | Complete: approval received, remote verified |
+| G1 | One browser/API loop through four replaceable fakes, reset, check and core smoke; review before any main merge | Technical checks passed; team review pending |
 | G2 | Small PRs replace fake learner, policy, diagnosis and teaching; improve UI/content; add Bedrock and a small provider adapter | Blocked on G1 |
 | G3 | Rehearse live Bedrock demo/fallback; deploy the same app to AWS if required/feasible; add only needed persistence/access controls | Not started |
 | G4 | Freeze a demo SHA and rehearse the presentation with a labeled offline backup | Not started |
@@ -38,7 +38,7 @@ Aim to finish the first working loop in the first short team build session; do n
 
 ## Information to resolve when relevant
 
-- GitHub URL/history/default branch and five human role assignments before remote integration; account handles are not a prerequisite for local loop design.
+- GitHub URL/history/default branch are verified; main contains the approved Phase 1 bootstrap. Five human role assignments and team review still need confirmation before splitting workstreams.
 - Event duration, deadline, official judging rules and actual AWS requirements.
 - AWS account/region, allowed Bedrock model/access/quota, credits/spending limit and permission for any hosting work.
 - Whether judges need a public URL or presenter-controlled access is sufficient.

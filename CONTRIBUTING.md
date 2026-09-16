@@ -1,12 +1,12 @@
 # Hackathon integration workflow
 
-Status: documentation only; no checks, scripts, CI or GitHub protections are implemented. Use the same simple process manually until automation saves time.
+Status: G1 has working setup/dev/check/smoke commands. CI and GitHub protection automation remain deferred. Use the seven-check preflight manually; do not merge the baseline into main under the current task authorization.
 
 ## Bootstrap and the single baseline
 
-This local main has no commits or remote. SWE1 obtains the existing GitHub URL, inspects its history/default branch, and reconciles these documents without replacing remote work. Do not invent a remote or force-push an unrelated root history. For an empty remote, seed the reviewed documentation when authorized; otherwise use its normal documentation PR. This guide calls the intended canonical branch main; verify the actual default first.
+Reconciliation is complete: origin is `https://github.com/lukeeskinner/MindsAndMachines.git`, default branch main, approved documentation base `5ecaecf`. The user intentionally bootstrapped the empty remote; this implementation preserves that history. Do not invent a remote or force-push an unrelated root history. For an empty remote, seed the reviewed documentation when authorized; otherwise use its normal documentation PR. This guide calls the intended canonical branch main; verify the actual default first.
 
-After explicit Phase 2 approval, use **one `codex/baseline` branch and one primary coding-agent implementation session controlled by SWE1**. All five teammates participate in building/reviewing that session's work. No parallel implementation branches or coding sessions until G1 is accepted. SWE1's baseline session may edit all required module paths. A second SWE reviews the baseline PR; all five review the running loop. Record the merged main SHA before feature work starts.
+After explicit Phase 2 approval, use **one `codex/baseline` branch and one primary coding-agent implementation session controlled by SWE1**. All five teammates participate in building/reviewing that session's work. No parallel implementation branches or coding sessions until G1 is accepted. SWE1's baseline session may edit all required module paths. A second SWE reviews the baseline and all five review the running loop. Stop for that review now: no push/merge to main is authorized. A later authorized main merge and team acceptance precede feature work.
 
 G1 acceptance is exactly PHASE2.md. GitHub configuration, CI jobs and preflight scripts are not substitutes for, or blockers to, the working loop.
 
@@ -22,7 +22,7 @@ Prefer small increments and frequent integration over five large end-of-event me
 
 ## MVP preflight — seven checks only
 
-This is a checklist first. SWE1 may later wrap it in a short script. Planned check/smoke commands do not exist yet; G1 implements their smallest useful versions.
+This is a checklist first. SWE1 may later wrap it in a short script. G1 implements the small check/smoke commands documented in README.md.
 
 | Check | Simple method |
 | --- | --- |
@@ -40,7 +40,7 @@ Do not add PR-path intersection analysis, trusted-base rule loaders, Git object 
 
 ## Commands and CI
 
-Planned commands (not implemented yet):
+Implemented commands:
 
 | Command | Purpose |
 | --- | --- |
@@ -57,4 +57,4 @@ If CI is added, do not give untrusted PR code secrets. Live Bedrock smoke runs s
 
 SWE1 owns common types, fixtures and wiring. Discuss an exact field/signature change and its callers before landing it; update the small Python/TypeScript types and example together. Handwritten types are allowed. Record a narrow cross-owner exception in the issue/PR when needed; no elaborate approval metadata is required.
 
-The PR should say what changed, which paths/contract changed, which check and smoke were run, and anything still unverified. For documentation-only changes now, application checks are not implemented; report document checks only. Do not call an unavailable test a pass or make a later stretch test an implicit G1 requirement.
+The PR should say what changed, which paths/contract changed, which check and smoke were run, and anything still unverified. For documentation-only changes, report relevant document checks; application changes require the check and core smoke. Do not call an unavailable test a pass or make a later stretch test an implicit G1 requirement.

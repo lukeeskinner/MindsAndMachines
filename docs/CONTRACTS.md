@@ -1,12 +1,12 @@
 # Minimum replaceable contracts
 
-Status: documentation only; Phase 2 awaits user approval. This replaces the earlier production-style contract proposal. SWE1 owns the shared shapes and examples; the four module owners review changes. The goal is to replace each fake without changing its callers.
+Status: G1 types and interfaces are implemented in `contracts/models.py`, `contracts/interfaces.py` and `contracts/api.ts`, with one example payload in `contracts/fixtures/turn_response.json`. No generated-client infrastructure was added. SWE1 owns the shared shapes and examples; the four module owners review changes. The goal is to replace each fake without changing its callers.
 
 ## Keep representation small
 
 Use simple Python dataclasses or Pydantic models in `contracts/`, one shared example payload, and a small TypeScript type file there if needed. A handwritten Python/TypeScript pair is acceptable at this scale; SWE1 keeps it aligned with the example and the loop check. Type/schema/client generation is optional only when nearly free. FastAPI's built-in OpenAPI output is fine; no extra generation pipeline is required.
 
-Use snake_case JSON keys, stable catalog IDs and finite numbers. The API validates the handful of expected fields. No request/attempt IDs, state versions, catalog/model version envelopes, event log or migration framework in G1. Keep rubrics and answer keys server-side. The following tables describe records, not code to implement during Phase 1.
+Use snake_case JSON keys, stable catalog IDs and finite numbers. The API validates the handful of expected fields. No request/attempt IDs, state versions, catalog/model version envelopes, event log or migration framework in G1. Keep rubrics and answer keys server-side. The following tables describe the G1 records implemented on the review branch.
 
 ## Shared records
 
@@ -39,7 +39,7 @@ Means and interval endpoints are in [0,1]; lower ≤ upper; evidence counts are 
 | Decision policy — DS | `choose(concepts, assessment, candidates, history) -> Optional[Decision]` | Pure, authoritative intervention choice; null means complete |
 | Teaching — SWE4 | `async teach(decision, assessment, concepts, presentation_preferences) -> TeachingResult` | Format the selected response using LearnerPresentationPreferences; catalog/provider dependencies injected at startup |
 
-The coordinator takes the session's question, answer, learner state and history, then calls assess → update → choose → teach. It returns the new state and response. When the policy returns null, use a fixed completion message. It must not compute assessment, math or decision logic itself. Pass ordinary typed values; no services, queues or framework are needed between these seams.
+The coordinator takes the session's question, answer, learner state and history, then calls assess → update → choose → teach. It returns the new state and response. When the policy returns null, Teaching accepts that null decision and returns a fixed completion message, keeping the four-stage trace intact. It must not compute assessment, math or decision logic itself. Pass ordinary typed values; no services, queues or framework are needed between these seams.
 
 The API also accepts `presentation_preferences`, normalizes it to LearnerPresentationPreferences, and passes it through the coordinator only to `teach`. Missing object or fields default to false; accept boolean values only. Step-by-step and concise may both be true: return short numbered steps. Preferences must not enter LearnerState, evidence/history, Assessment, or policy inputs. For the same state/evidence, changing preferences must leave all estimates, uncertainty, counts and the Decision unchanged; Teaching must preserve the selected next_question_id.
 

@@ -1,6 +1,6 @@
 # Phase 2 / G1 — prove the replaceable loop
 
-**Phase 2 is not authorized yet.** The user supports the core architecture and requested this simpler plan before approving implementation. G1 exists only to prove that the following loop works through independently replaceable modules:
+**G1 implementation is authorized and technically verified on `codex/baseline`; team review remains pending. Do not merge into main or begin G2.** The user approved the simplified plan and the presentation-preference placeholder. G1 exists only to prove that the following loop works through independently replaceable modules:
 
 ```text
 browser → API → fake assessment → fake learner → fake decision policy
@@ -21,7 +21,7 @@ This baseline session may touch every path needed for the slice. The five-role o
 2. Wire API → coordinator → the four fake modules. Use a small in-memory session dictionary, unless a few straightforward SQLite operations are equally quick. Keep state access in the API/storage layer.
 3. Add one browser screen: question, answer submission, tutor response, concept estimates, selection reason, and new-session/reset. Display deterministic mode. Disable the submit button while one request is pending; assume sequential use.
 4. Add one small backend loop check and document one command to run checks. Add a core smoke path against the real API, with a browser walkthrough. A browser automation script is welcome only if quick to add.
-5. All five teammates review the running slice; a teammate follows the setup instructions from a fresh checkout. Merge the baseline, record its main SHA, then open the separate feature workstreams.
+5. All five teammates review the running slice; a teammate follows the setup instructions from a fresh checkout. Stop for review on `codex/baseline`. The current user instruction prohibits merging into main. A future, explicitly authorized merge and team acceptance must happen before separate feature workstreams.
 
 A single CI job may run the same checks if easy to configure. CI setup, branch-protection configuration, schema generation and preflight automation are not G1 acceptance blockers. Manual review and the short preflight checklist suffice.
 
@@ -53,7 +53,7 @@ Private state can use canned `(alpha,beta)` tuples `(1,1)`, `(1,2)`, `(2,2)`. Th
 - The browser completes the golden loop through the API and all four fake boundaries; a simple stage list or test spies demonstrate those calls.
 - The response displays the canned concept change, chosen intervention/reason and teaching text. The preference placeholder changes delivery only, as checked by the small comparison above. Each module has the agreed callable interface so its implementation can be replaced independently.
 - New-session/reset works. In-memory state lost on backend restart is acceptable and documented.
-- The small check command and core smoke pass; all five teammates review the baseline and SWE1 records the accepted main SHA.
+- The small check command and core smoke pass. All five teammates review the baseline before team acceptance; this human review remains pending. Record the review branch SHA now; no main merge or accepted-main SHA is authorized in this task.
 
 The smoke may be an API sequence plus a short manual browser walkthrough; a fully automated browser suite is not required. Do not mark unimplemented checks as passed, but do not invent additional gate requirements.
 
@@ -71,4 +71,4 @@ The smoke may be an API sequence plus a short manual browser walkthrough; a full
 | CODEOWNERS automation, sophisticated Git analysis, multiple CI jobs | Stretch; not required for the hackathon MVP |
 | Generated client/schema pipeline | Optional if nearly free; not a dependency of any gate |
 
-Do not begin any of this implementation until the user approves Phase 2.
+The implemented G1 commands and browser walkthrough are in README.md. Stop after technical verification and wait for review. G2 and any merge into main require later authorization.

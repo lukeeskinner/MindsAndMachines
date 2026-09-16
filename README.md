@@ -1,96 +1,82 @@
-# Minds & Machines — Adaptive AI Tutor
+# Minds & Machines — deterministic learning lab
 
-An adaptive tutor that diagnoses an answer, updates a concept-level learning estimate, chooses an intervention, and explains that choice to the learner.
+**G1 is implemented on `codex/baseline` and ready for review.** It is a local, two-question demo with four independently replaceable fakes. No real agents, model/provider calls, AWS integration, mathematical updates, policy scoring, authentication or persistence are implemented. G2 is not authorized.
 
-**Status: core architecture supported by the user; implementation plan simplified for hackathon speed. Documentation only. Phase 2 is not approved, and there is no runnable application, CI or deployment.**
+## Run locally
 
-## Start here
+Prerequisites: macOS/Linux, Python 3.12 or 3.13, Node.js 22.12+ (tested with Node 24), npm, and make. Windows users can use WSL; native Windows execution is not verified.
 
-1. Coding agents: read [AGENTS.md](AGENTS.md).
-2. Product and technical decisions: [architecture](docs/ARCHITECTURE.md).
-3. Stable interfaces: [contracts](docs/CONTRACTS.md).
-4. Your scope and current work: [ownership](docs/OWNERSHIP.md) and [workstreams](docs/WORKSTREAMS.md).
-5. Integration rules: [contributing](CONTRIBUTING.md).
-6. First implementation: [Phase 2 baseline](docs/PHASE2.md).
-7. Cloud choices: [AWS strategy](docs/AWS.md).
-8. Demo and evaluation: [demo plan](docs/DEMO.md).
+One-time dependency setup (requires package-registry access):
 
-Each topic has one authoritative document. CLAUDE.md imports AGENTS.md; do not maintain two rule sets. The attached brainstorm informed the design but is not a service checklist.
-
-## Repository inspection — 2026-09-16
-
-- Local Git repository exists; HEAD points to `refs/heads/main`, which has no commits.
-- No tracked project files, working files, local feature branches, or configured remotes existed before this work.
-- Git metadata includes a Codex capture reference to the empty tree and sample hooks; neither is application history nor an installed integration check.
-- Local configuration contains ordinary repository settings (including case-insensitive filenames); no remote/branch tracking or custom hooks path was found. `gh` was not available on PATH.
-- The brief says an existing GitHub repository is the source of truth. Its URL, contents, default branch, permissions, protections, and Actions availability have not been verified. Do not assume GitHub is empty because this checkout is empty.
-- Phase 1 creates only the Markdown files listed below. No commit, push, branch creation, Git configuration change, dependency installation, model invocation, or deployment was performed.
-
-## Chosen shape
-
-React + TypeScript UI; one FastAPI/Python backend; in-process orchestration, assessment, teaching, learner model and policy modules; curated concept/question files; in-memory state for G1, with simple SQLite only when useful. Bedrock is the intended live inference provider. Local deterministic mode requires no cloud credentials. The future AWS deployment uses the same app on one EC2 instance if hosting is needed/feasible. Agent Toolkit for AWS is development tooling for Codex/Claude, not a runtime tutor component. Cognito and other infrastructure stay deferred unless event requirements justify them.
-
-G1 proves only browser → API → fake assessment → fake learner → fake decision → fake teaching → response → browser, plus reset. All five teammates build/review together using one baseline branch and one primary coding-agent implementation session controlled by SWE1. Feature branches begin only after acceptance.
-
-The mathematical MVP uses a Beta distribution per skill to estimate success on comparable unaided questions, with uncertainty. The UI calls this a **mastery estimate**, explains the proxy, and never presents it as a validated measure of knowledge. The next-action policy is an explicit heuristic; it is not claimed to estimate causal learning gain.
-
-## Files created in Phase 1
-
-```text
-.
-├── README.md
-├── AGENTS.md
-├── CLAUDE.md
-├── CONTRIBUTING.md
-├── .github/
-│   └── pull_request_template.md
-└── docs/
-    ├── ARCHITECTURE.md
-    ├── CONTRACTS.md
-    ├── OWNERSHIP.md
-    ├── WORKSTREAMS.md
-    ├── PHASE2.md
-    ├── AWS.md
-    └── DEMO.md
+```sh
+make setup
 ```
 
-## Proposed application tree — not created yet; G1 creates only its few required files
+Uses an existing uv installation or installs pinned uv in ignored `.tools/`. Python dependencies are locked in `backend/uv.lock`; npm dependencies are locked in `frontend/package-lock.json`. No cloud keys are needed.
 
-```text
-frontend/                     # SWE2: React/Vite, UI tests, frontend lockfile
-backend/
-  pyproject.toml              # SWE1: one Python environment and lockfile
-  uv.lock
-  app/
-    main.py                  # SWE1: dependency wiring and static UI serving
-    api/                     # SWE1: HTTP/session validation
-    storage/                 # SWE1: memory helpers; simple SQLite later if useful
-    agents/                  # SWE3: coordinator, assessor; provider adapters after G1
-    teaching/                # SWE4: fake tutor first; tools/verification after G1
-    learner/                 # DS: belief updates and uncertainty
-    policy/                  # DS: intervention selection and explanations
-  tests/
-    api/                     # SWE1
-    agents/                  # SWE3
-    teaching/                # SWE4
-    learner/                 # DS
-    policy/                  # DS
-contracts/                   # SWE1: minimal types and examples; generation optional
-  fixtures/                  # SWE1: boundary and end-to-end example payloads
-content/                     # SWE4: authored catalog, rubrics, provenance
-evals/                       # SWE4: educational rubric cases and review results
-tests/integration/           # SWE1: module replacement checks
-tests/e2e/                   # SWE1: optional browser automation after the manual smoke
-scripts/                     # SWE1: check/smoke helpers; other automation optional
-infra/                       # SWE1: one-container build and later EC2 runbook
-.github/workflows/           # SWE1: one optional credential-free CI job
-.github/CODEOWNERS           # Optional later convenience, never a G1 blocker
-.gitignore                   # SWE1: credentials, runtime data, builds, worktrees
-Makefile                     # SWE1: documented entry points
+Start both frontend and FastAPI:
+
+```sh
+make dev
 ```
 
-Do not create every directory speculatively. Phase 2 should create only what its working slice uses. Existing Markdown files remain alongside this future tree.
+Open [the learning lab](http://127.0.0.1:5173). FastAPI listens on `127.0.0.1:8000`; Vite proxies `/api` to it. Ctrl-C stops both processes. Both ports must be free. Runtime works offline after setup. Sessions live only in backend memory; browser/backend restart requires a new session.
 
-## Next gate
+Run the small backend suite and frontend typecheck/build:
 
-Review the simplified PHASE2.md and explicitly approve Phase 2 before implementation. Supply the GitHub URL so SWE1 can reconcile the existing repository before remote integration. Then build only the small deterministic loop in one branch/session; parallel feature implementation begins after G1 acceptance. No implementation, toolkit installation or deployment is authorized by this revision.
+```sh
+make check
+```
+
+Run the real HTTP core smoke, including reset and presentation-preference comparison:
+
+```sh
+make smoke
+```
+
+The smoke starts/stops its own server on an available loopback port. No separately running app is needed. It complements the browser walkthrough below; it does not mock API responses.
+
+## Golden browser walkthrough
+
+1. Start a new session. All six concepts show 50.0%, interval 5.0–95.0%, and zero evidence.
+2. On the relationship question, choose **A: Every admissible heuristic is also consistent**, then **Check answer**.
+3. See an incorrect diagnosis, a scripted **Worked example** and its reason, a tutor explanation, and `FakeAssessor → FakeLearner → FakePolicy → FakeTutor`. Only the relationship concept changes: mean `0.3333333333333333`, interval `[0.0253, 0.7764]`, evidence count 1.
+4. On the fresh graph question, choose **B: Admissible, but not consistent**, then submit. The same concept becomes mean `0.5`, interval `[0.1354, 0.8646]`, count 2. The two-question demo completes. Other concepts never change.
+5. Select **plain language / explain jargon**, **step-by-step**, and **concise**; click **New session / reset**. The initial question/state return and the checkboxes stay selected.
+6. Repeat A then B. The first tutor response becomes short plain-language numbered steps. Assessment, estimates, intervals, evidence counts, intervention and next question match the first run. Changing a checkbox does not submit an answer or alter a prior response.
+
+The screen rounds percentages to one decimal; the API returns the documented canned values. “I'm not sure yet” uses the single curated fallback without adding evidence. The golden sequence is the demonstrated state progression; other permitted answers have deterministic placeholder behavior and may leave estimates unchanged. This is intentionally not a learning model.
+
+## Runtime boundaries
+
+```text
+React browser → POST /api/v1/turns → FastAPI route
+  → Coordinator → FakeAssessor.assess
+                → FakeLearner.update
+                → FakePolicy.choose
+                → FakeTutor.teach
+  → API-owned in-memory state → public JSON → React
+```
+
+`backend/app/main.py` is the one composition root. All four interfaces are in `contracts/interfaces.py`; shared records are in `contracts/models.py`, the small frontend counterpart is `contracts/api.ts`, and the first golden response is in `contracts/fixtures/turn_response.json`. The replacement test substitutes each seam independently. Only FakeTutor receives presentation preferences. Completion also passes through FakeTutor with a null decision and a fixed message.
+
+## Repository map
+
+- `frontend/`: React screen, accessible controls and styles; no hard-coded API responses.
+- `backend/app/api/`, `storage/`, `main.py`: request validation, in-memory state and wiring.
+- `backend/app/agents/`: coordinator and FakeAssessor.
+- `backend/app/learner/`, `policy/`, `teaching/`: the three other fakes and local content loader.
+- `contracts/`: approved types/interfaces and example payload; no code generation.
+- `content/demo.json`: six concept IDs, two questions and one teaching example in presentation variants.
+- `tests/integration/test_loop.py`: five targeted tests, including all four seam replacements.
+- `scripts/`: setup, dev process launcher, and real HTTP smoke.
+
+Full relevant tree, files changed, verification and limitations: [G1 report](docs/G1_REPORT.md).
+
+## Git and team status
+
+Verified repository: [lukeeskinner/MindsAndMachines](https://github.com/lukeeskinner/MindsAndMachines). The user bootstrapped the empty remote with approved Phase 1 documentation at `5ecaecfdfa0484c8da18ceff9c6646a2b258f1ea`. The remote default is main. This implementation builds on that history on `codex/baseline`; main is not merged, rewritten or pushed by this task.
+
+The technical checks and agent-run browser walkthrough are complete. Review by the five teammates and a teammate-run fresh checkout remain human acceptance steps; they are not claimed as completed. Do not start separate workstreams until team acceptance and any later explicitly authorized main merge.
+
+Coding sessions begin with [AGENTS.md](AGENTS.md), then [Phase 2](docs/PHASE2.md), [contracts](docs/CONTRACTS.md), [ownership](docs/OWNERSHIP.md), [workstreams](docs/WORKSTREAMS.md), and [contributing](CONTRIBUTING.md). [Architecture](docs/ARCHITECTURE.md), [AWS strategy](docs/AWS.md), and [demo plan](docs/DEMO.md) preserve the larger product direction; they do not authorize G2 work.

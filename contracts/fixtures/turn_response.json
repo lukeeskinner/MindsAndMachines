@@ -1,0 +1,101 @@
+{
+  "session_id": "example-session",
+  "assessment": {
+    "outcome": "incorrect",
+    "misconception_id": "admissible_means_consistent",
+    "feedback": "The distinction to revisit: an admissible heuristic need not be consistent."
+  },
+  "concepts": [
+    {
+      "concept_id": "bfs",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    },
+    {
+      "concept_id": "ucs",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    },
+    {
+      "concept_id": "astar",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    },
+    {
+      "concept_id": "admissibility",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    },
+    {
+      "concept_id": "consistency",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    },
+    {
+      "concept_id": "admissibility_vs_consistency",
+      "mean": 0.3333333333333333,
+      "interval90": {
+        "lower": 0.0253,
+        "upper": 0.7764
+      },
+      "evidence_count": 1
+    }
+  ],
+  "decision": {
+    "candidate_id": "relationship-example",
+    "concept_id": "admissibility_vs_consistency",
+    "kind": "worked_example",
+    "reason": "A worked example contrasts the two conditions before a fresh question. This selection is scripted for the deterministic baseline."
+  },
+  "tutor": {
+    "text": "Admissibility is a global bound: h(n) must not exceed the optimal remaining path cost h*(n). Consistency is a local constraint: h(n) \u2264 c(n,n\u2032) + h(n\u2032) on every edge.\n\nFor example, take S \u2192 A with cost 1 and A \u2192 G with cost 2. Set h(S)=3, h(A)=1 and h(G)=0. All estimates are admissible, but the S \u2192 A edge is inconsistent: 3 > 1 + 1.\n\nWith h(goal)=0, consistency implies admissibility. Admissibility alone does not guarantee consistency. Try checking both conditions on the fresh graph.",
+    "fallback": false
+  },
+  "next_question": {
+    "question_id": "relationship-q02",
+    "concept_id": "admissibility_vs_consistency",
+    "prompt": "Try a fresh example. Edges are S \u2192 A (cost 1), A \u2192 G (cost 3), and S \u2192 G (cost 4). Let h(S)=4, h(A)=1, h(G)=0. How would you classify this heuristic?",
+    "choices": [
+      {
+        "id": "a",
+        "text": "Both admissible and consistent."
+      },
+      {
+        "id": "b",
+        "text": "Admissible, but not consistent."
+      },
+      {
+        "id": "unsure",
+        "text": "I'm not sure yet."
+      }
+    ]
+  },
+  "mode": "dummy",
+  "provider": "fake",
+  "trace": [
+    "assess",
+    "update",
+    "select",
+    "teach"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "concepts": ["bfs", "ucs", "astar", "admissibility", "consistency", "admissibility_vs_consistency"],
+  "questions": [
+    {
+      "question_id": "relationship-q01",
+      "concept_id": "admissibility_vs_consistency",
+      "prompt": "Assume nonnegative edge costs and h(goal) = 0. Which statement about admissible and consistent heuristics is true?",
+      "choices": [
+        {"id": "a", "text": "Every admissible heuristic is also consistent."},
+        {"id": "b", "text": "Every consistent heuristic is admissible, but the reverse need not hold."},
+        {"id": "unsure", "text": "I'm not sure yet."}
+      ],
+      "answer_key": "b",
+      "rubric": "Consistency imposes a local inequality along each edge. With h(goal)=0, summing along a path implies admissibility. Admissibility alone does not imply consistency."
+    },
+    {
+      "question_id": "relationship-q02",
+      "concept_id": "admissibility_vs_consistency",
+      "prompt": "Try a fresh example. Edges are S → A (cost 1), A → G (cost 3), and S → G (cost 4). Let h(S)=4, h(A)=1, h(G)=0. How would you classify this heuristic?",
+      "choices": [
+        {"id": "a", "text": "Both admissible and consistent."},
+        {"id": "b", "text": "Admissible, but not consistent."},
+        {"id": "unsure", "text": "I'm not sure yet."}
+      ],
+      "answer_key": "b",
+      "rubric": "Estimates 4,1,0 do not exceed true remaining costs 4,3,0. Consistency fails on S→A because 4 > 1+1."
+    }
+  ],
+  "candidates": [
+    {
+      "candidate_id": "relationship-example",
+      "concept_id": "admissibility_vs_consistency",
+      "kind": "worked_example",
+      "content_id": "heuristic-distinction",
+      "next_question_id": "relationship-q02"
+    }
+  ],
+  "teaching": {
+    "heuristic-distinction": {
+      "standard": [
+        "Admissibility is a global bound: h(n) must not exceed the optimal remaining path cost h*(n). Consistency is a local constraint: h(n) ≤ c(n,n′) + h(n′) on every edge.",
+        "For example, take S → A with cost 1 and A → G with cost 2. Set h(S)=3, h(A)=1 and h(G)=0. All estimates are admissible, but the S → A edge is inconsistent: 3 > 1 + 1.",
+        "With h(goal)=0, consistency implies admissibility. Admissibility alone does not guarantee consistency. Try checking both conditions on the fresh graph."
+      ],
+      "plain": [
+        "A heuristic is a guess of the remaining travel cost. Admissible means the guess is never higher than the cheapest remaining route. Consistent means a guess cannot drop by more than the cost of the next step.",
+        "Imagine S → A costs 1 and A → G costs 2. Guess 3 at S, 1 at A and 0 at the goal. None of these guesses is too high. But the guess drops from 3 to 1 on a step costing only 1, so it is not consistent.",
+        "With a zero guess at the goal, every consistent heuristic is admissible. A guess can still be admissible without being consistent. Try both checks on the next graph."
+      ],
+      "concise": [
+        "Admissible: h(n) ≤ h*(n). Consistent: h(n) ≤ c(n,n′) + h(n′) for each edge.",
+        "Counterexample: S → A costs 1, A → G costs 2; h=(3,1,0). Admissible, but 3 > 1 + 1 violates consistency.",
+        "With h(goal)=0: consistent implies admissible; the reverse can fail."
+      ],
+      "plain_concise": [
+        "Admissible: never guess above the cheapest remaining cost. Consistent: the guess drops no faster than each step costs.",
+        "S → A costs 1; A → G costs 2. Guesses (3,1,0) are not too high, but the first drop is 2 for a step costing 1.",
+        "With zero at the goal, consistent implies admissible. The reverse can fail."
+      ]
+    }
+  }
+}
