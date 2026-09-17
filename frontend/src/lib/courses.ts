@@ -63,8 +63,8 @@ export function createCourseUploadAdapter(path = "/api/v1/courses"): CourseUploa
   };
 }
 
-export async function createSession(course?: PublicCourse | null): Promise<SessionResponse> {
-  const result = await post<SessionResponse>("sessions", course ? { course_id: course.course_id } : {});
+export async function createSession(course?: PublicCourse | null, previous_session_id?: string, reset_learner = false): Promise<SessionResponse> {
+  const result = await post<SessionResponse>("sessions", { ...(course ? { course_id: course.course_id } : {}), ...(previous_session_id ? { previous_session_id, reset_learner } : {}) });
   // Older demo fixtures omit course_id. Uploaded sessions must echo it exactly.
   if ((result.course_id ?? null) !== (course?.course_id ?? null)) throw new CourseError("processing");
   if (course) {

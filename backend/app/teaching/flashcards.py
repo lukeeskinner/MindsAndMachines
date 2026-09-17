@@ -31,8 +31,22 @@ def course_flashcards(course) -> list[Flashcard]:
     # question records, rubrics, answer keys, provider prompts or whole sources.
     filenames = {chunk.chunk_id: material.filename
                  for material in course.materials for chunk in material.chunks}
-    return [Flashcard(card_id=f"{concept.concept_id}-recall", concept_id=concept.concept_id,
-                      front=f"What are the key ideas in {concept.name}?", back=concept.summary,
-                      source=" · ".join(dict.fromkeys(filenames[ref.chunk_id]
-                                         for ref in concept.source_refs)))
-            for concept in course.concepts]
+    from backend.app.ingestion.passages import build_passages, topic_passages
+    from backend.app.ingestion.models import stable_id
+    import re
+    passages = {p.label: p for p in topic_passages(build_passages(course.materials))}
+    cards = []
+    for concept in course.concepts:
+        passage = passages.get(concept.name)
+        notes = ([a for _, a in passage.answers[:3]] if passage else
+                 [part for part in re.split(r"(?<=[.!?])\s+", concept.summary) if len(part.split()) >= 3][:3])
+        if not notes:
+            notes = [concept.summary]
+        unique = list(dict.fromkeys(notes))
+        purposes = ["Core idea", "Source detail", "Source connection"]
+        for index, note in enumerate(unique):
+            cards.append(Flashcard(
+                card_id=stable_id("card", concept.concept_id, note), concept_id=concept.concept_id,
+                front=f"{purposes[index]} · {concept.name}", back=note,
+                source=" · ".join(dict.fromkeys(filenames[ref.chunk_id] for ref in concept.source_refs))))
+    return cards

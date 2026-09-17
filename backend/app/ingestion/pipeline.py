@@ -79,7 +79,8 @@ def _parse_proposal(text: str):
 
 
 def _question_signature(prompt, choices):
-    return (prompt.casefold(), tuple(sorted(choice.casefold() for choice in choices)))
+    from backend.app.teaching.targeted_questions import normalized as content_normalized
+    return (content_normalized(prompt), tuple(sorted(content_normalized(choice) for choice in choices)))
 
 
 def _validate_artifacts(text: str, materials: tuple, course_id: str, *, _minimum_questions=1) -> tuple[tuple, tuple, tuple]:
@@ -255,20 +256,21 @@ def _complete_local_bank(concepts):
     return {"concepts": concepts}
 
 
-def _inspect_plan(plan, passages, materials, course_id, *, protected_paths=()):
+def _inspect_plan(plan, passages, materials, course_id, *, protected_paths=(), rejected=()):
     """Inspect slots independently; never return unchecked generated questions.
 
     Structural/source failures remain fatal. The empty-question validation below
     is only an internal structural audit; _finish_generation enforces runtime
     minimums before any course can leave this module.
     """
-    failures = []
+    failures = list(rejected)
     try:
         resolved = resolve_plan(plan, passages)
         paths = [[question_path(ci, qi) for qi in range(len(c["questions"]))]
                  for ci, c in enumerate(resolved["concepts"])]
     except QuestionValidationError as exc:
-        resolved, paths, failures = exc.resolved, exc.question_paths, list(exc.failures)
+        resolved, paths = exc.resolved, exc.question_paths
+        failures.extend(exc.failures)
     structural = {"concepts": [{**c, "questions": []} for c in resolved["concepts"]]}
     _validate_artifacts(json.dumps(structural), materials, course_id, _minimum_questions=0)
     slots = [(path, ci, q) for ci, c in enumerate(resolved["concepts"])
@@ -281,6 +283,8 @@ def _inspect_plan(plan, passages, materials, course_id, *, protected_paths=()):
         "Question choices or answer key are invalid.": "invalid_question_choices",
     }
     for path, ci, proposal in slots:
+        if path in {f["question_id"] for f in rejected}:
+            continue
         single = {"concepts": [{**resolved["concepts"][ci], "questions": [proposal]}]}
         try:
             _, questions, _ = _validate_artifacts(json.dumps(single), materials, course_id)
@@ -296,6 +300,16 @@ def _inspect_plan(plan, passages, materials, course_id, *, protected_paths=()):
             failures.append({"question_id": path, "reason": reason})
             continue
         question = questions[0]
+        passage = next(p for p in passages if p.passage_id == plan["concepts"][ci]["passage_id"])
+        if passage.is_pool:
+            source_texts = [chunk.normalized_text.casefold() for material in materials
+                            for chunk in material.chunks if chunk.status == "extracted"]
+            if any(choice.id != question.answer_key and any(
+                    choice.text.casefold().rstrip(".!?;:") in source for source in source_texts)
+                   for choice in question.choices):
+                failures.append({"question_id": path, "reason": "ambiguous_question",
+                                 "rule": "alternative_exact_source_statement"})
+                continue
         signature = _question_signature(question.prompt, (c.text for c in question.choices))
         if signature in signatures:
             failures.append({"question_id": path, "reason": "duplicate_question_content",
@@ -310,11 +324,14 @@ def _inspect_plan(plan, passages, materials, course_id, *, protected_paths=()):
     return artifacts, failures, frozenset(accepted)
 
 
-def _finish_generation(inspection, calls, initial_invalid=()):
+def _finish_generation(inspection, calls, initial_invalid=(), *, minimum=1):
     artifacts, failures, accepted = inspection
     concepts, questions, _ = artifacts
     if any(not any(q.concept_id == c.concept_id for q in questions) for c in concepts):
         raise IngestionError("Every runtime concept needs at least one usable grounded question.")
+    if any(sum(q.concept_id == c.concept_id for q in questions) <
+           (minimum[i] if isinstance(minimum, tuple) else minimum) for i, c in enumerate(concepts)):
+        raise IngestionError("The source supports a practice pool but fewer than three safe questions survived.")
     discarded = len({f["question_id"] for f in failures})
     repaired = len(set(initial_invalid) & accepted)
     return artifacts, calls, discarded, repaired
@@ -331,11 +348,24 @@ async def _generate_artifacts(passages, materials, course_id):
     topics = topic_passages(passages)
     if topics:
         passages = topics
+    minimum = tuple(3 if p.is_pool else 1 for p in topics) if topics else 1
     payload = {"passages": [p.public_to_provider() for p in passages]}
     system = SYSTEM
     if topics:
         payload["required_passage_ids"] = [p.passage_id for p in passages]
-        system = ("Write the question wording for EVERY named slot in the structured-response tool. "
+        system = ("Where the schema fixes prompt to an enum, copy it exactly. These are explicitly "
+                  "SOURCE RECALL questions asking for the exact missing ending of a quoted statement. "
+                  "Generate THREE alternative ENDINGS, of similar length to assigned_answer_echo. "
+                  "Do not repeat the prefix already displayed in the prompt in any option. "
+                  "Do not output another exact source statement, a fragment of the correct answer, "
+                  "or equivalent duplicate options. Keep alternatives plausible and similarly sized. "
+                  "Never change the assigned original source statement or its prefix cue. "
+                  "You are a distractor writer. The correct choice is ALREADY supplied. "
+                  "First copy assigned_answer_echo, then write a positive prompt and THREE FALSE answers. "
+                  "NEVER put a true statement in any wrong_option field, even if it omits a heading. "
+                  "For a worked example, all three alternatives must yield a WRONG result or relationship. "
+                  "For a rule, all three alternatives must CONTRADICT the supplied rule. "
+                  "Write the question wording for EVERY named slot in the structured-response tool. "
                   "Each slot description contains its topic and EXACT assigned correct answer. "
                   "Return only the named question objects; no concepts or passage IDs. "
                   "For each object copy assigned_answer_echo exactly from its schema enum. That is "
@@ -357,9 +387,10 @@ async def _generate_artifacts(passages, materials, course_id):
                 plan = _parse_proposal(result.text)
                 if topics:
                     plan = resolve_fixed_topics(plan, passages)
-                initial = _inspect_plan(plan, passages, materials, course_id)
+                inspected = _inspect_plan(plan, passages, materials, course_id)
+                initial = inspected
                 if not initial[1]:
-                    return _finish_generation(initial, calls)
+                    return _finish_generation(initial, calls, minimum=minimum)
                 _log_question_failures(initial[1], 1)
                 targets = list(dict.fromkeys(f["question_id"] for f in initial[1]))
                 logger.info("course_ingestion_revision reason=%s", initial[1][0]["reason"])
@@ -377,15 +408,15 @@ async def _generate_artifacts(passages, materials, course_id):
                     # An unusable repair envelope has no authority over the valid
                     # initial bank. Preserve it; do not claim anything was repaired.
                     logger.info("course_ingestion_repair_unavailable reason=invalid_or_failed_response")
-                    return _finish_generation(initial, calls, targets)
+                    return _finish_generation(initial, calls, targets, minimum=minimum)
                 inspected = _inspect_plan(patched, passages, materials, course_id,
                                           protected_paths=initial[2])
                 _log_question_failures(inspected[1], 2)
-                return _finish_generation(inspected, calls, targets)
+                return _finish_generation(inspected, calls, targets, minimum=minimum)
     except TimeoutError as exc:
         if initial is not None:
             logger.info("course_ingestion_repair_unavailable reason=deadline")
-            return _finish_generation(initial, calls, targets)
+            return _finish_generation(initial, calls, targets, minimum=minimum)
         raise provider.ProviderError("Course generation deadline exceeded") from exc
 
 
@@ -420,7 +451,7 @@ async def process_course(paths: list[str | Path], *, title: str = "Uploaded cour
         raise
     if len({material.material_id for material in materials}) != len(materials):
         raise IngestionError("Duplicate source material.", materials=materials)
-    course_id = stable_id("course", "study-bank-2", title, sorted(material.material_id for material in materials))
+    course_id = stable_id("course", "study-bank-6", title, sorted(material.material_id for material in materials))
     sources = [{"chunk_id": chunk.chunk_id, "normalized_text": chunk.normalized_text}
                for material in materials for chunk in material.chunks if chunk.status == "extracted"]
     if not sources:
@@ -449,8 +480,8 @@ async def process_course(paths: list[str | Path], *, title: str = "Uploaded cour
         except IngestionError as exc:
             raise IngestionError(str(exc), materials=materials) from exc
         label = "bedrock"
-        warnings.append("AI-written questions use server-resolved source evidence and authored reading guidance.")
-        if calls == 2:
+        warnings.append("Rich pools use explicitly labeled exact-source recall questions with server-bound missing endings and prefix cues. These assess source recall, not general application mastery; source truth still requires human review.")
+        if repaired or discarded:
             warnings.append(f"One question repair attempted; {repaired} repaired questions accepted.")
         if discarded:
             warnings.append(f"Degraded generation: {discarded} invalid question slots omitted after one repair attempt.")
@@ -458,6 +489,6 @@ async def process_course(paths: list[str | Path], *, title: str = "Uploaded cour
         logger.info("course_ingestion_ready concepts=%s questions=%s provider_calls=%s repaired_questions=%s discarded_questions=%s",
                     len(concepts), len(questions), calls, repaired, discarded)
     return ProcessedCourse(course_id, title, materials, concepts, questions,
-                           ProcessingMetadata("1", label, calls, tuple(warnings), degraded=bool(discarded),
+                           ProcessingMetadata("2" if selected == "bedrock" and any(p.extra_evidence for p in topic_passages(passages)) else "1", label, calls, tuple(warnings), degraded=bool(discarded),
                                               discarded_question_count=discarded, repaired_question_count=repaired),
                            teaching=teaching)

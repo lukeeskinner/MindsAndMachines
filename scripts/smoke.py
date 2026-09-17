@@ -68,12 +68,19 @@ try:
     assert [r["decision"]["kind"] for r in results if r["decision"]] == [
         "socratic_hint", "diagnostic_probe", *(["worked_example"] * 5)]
     focus = next(c for c in second["concepts"] if c["concept_id"] == "admissibility_vs_consistency")
-    assert focus == {"concept_id": "admissibility_vs_consistency", "mean": 0.5,
+    assert focus == {"alpha": 2, "beta": 2, "concept_id": "admissibility_vs_consistency", "mean": 0.5,
         "interval90": {"lower": 0.1354, "upper": 0.8646}, "evidence_count": 2}
     assert second["assessment"]["outcome"] == "correct"
     assert final["decision"] is None and final["next_question"] is None
     final_focus = next(c for c in final["concepts"] if c["concept_id"] == "admissibility_vs_consistency")
     assert final_focus["evidence_count"] == 8 and final_focus["mean"] == 8 / 10
+    retake = post("sessions", {"previous_session_id": session["session_id"]})
+    assert retake["concepts"] == final["concepts"] and retake["session_start"] == final["concepts"]
+    assert retake["counts"]["accepted_observations"] == 0
+    assert retake["question"]["review"]
+    assert retake["question"]["question_id"] != session["question"]["question_id"]
+    explicit_reset = post("sessions", {"previous_session_id": retake["session_id"], "reset_learner": True})
+    assert explicit_reset["concepts"] == session["concepts"]
     reset = post("sessions", {})
     assert reset["session_id"] != session["session_id"]
     assert reset["concepts"] == session["concepts"] and reset["question"] == session["question"]

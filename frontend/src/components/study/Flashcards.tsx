@@ -25,7 +25,12 @@ export function Flashcards({ cards, names }: { cards: Flashcard[]; names: Record
     if (unchanged) return;
     // Refresh only when card content/order changes. An unchanged deck from a
     // quiz turn preserves browsing, reveal, self-ratings and review-again passes.
-    setDeck(cards.filter(c => !filter || c.concept_id === filter));
+    const next = cards.filter(c => !filter || c.concept_id === filter);
+    if (next[0]?.card_id === card?.card_id) {
+      const alternative = next.findIndex(c => c.concept_id === card.concept_id && c.card_id !== card.card_id);
+      if (alternative > 0) [next[0], next[alternative]] = [next[alternative], next[0]];
+    }
+    setDeck(next);
     setIndex(0); setRevealed(false);
   }, [cards]);
   useEffect(() => { if (index > 0) heading.current?.focus({ preventScroll: true }); }, [index]);

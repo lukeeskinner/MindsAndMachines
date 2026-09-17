@@ -119,6 +119,12 @@ class ChatTests(unittest.TestCase):
                     await started.wait()
                     duplicate = await client.post("/api/v1/chat", json={"session_id": self.sid, "message": "Explain"})
                     turn = await client.post("/api/v1/turns", json={"session_id": self.sid, "question_id": self.session["question"]["question_id"], "answer": "unsure"})
+                    retake = await client.post("/api/v1/sessions", json={
+                        "previous_session_id": self.sid, "course_id": self.session.get("course_id")})
+                    reset = await client.post("/api/v1/sessions", json={
+                        "previous_session_id": self.sid, "course_id": self.session.get("course_id"),
+                        "reset_learner": True})
+                    self.assertEqual((retake.status_code, reset.status_code), (409, 409))
                     release.set()
                     self.assertEqual((await pending).status_code, 200)
                     self.assertEqual(duplicate.status_code, 409)

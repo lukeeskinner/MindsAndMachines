@@ -2232,3 +2232,13 @@
     }
   }
 }
+
+.beta-plot { margin: 10px 0; color: #376fa0; min-width: 0; }
+.beta-plot svg { display: block; width: 100%; max-height: 175px; overflow: visible; }
+.beta-plot figcaption { font-size: 11px; line-height: 1.6; color: #536476; }
+.beta-scale { display: block; opacity: .8; }
+.beta-compact { width: 100%; margin: 2px 0; }
+.beta-compact svg { max-height: 78px; }
+.concept-row .beta-plot { grid-column: 1 / -1; }
+.evidence-comparison dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.review-notice { padding: 12px; border-radius: 8px; background: #fff4d9; color: #604914; }

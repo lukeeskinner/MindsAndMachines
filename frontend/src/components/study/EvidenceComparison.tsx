@@ -1,5 +1,6 @@
 import { useCourseLabels } from "../course/CourseContext";
 import type { ConceptEstimate } from "../../../../contracts/api";
+import { BetaDistributionPlot } from "./BetaDistributionPlot";
 import { percent, intervalWidth } from "./model";
 
 // Compare public snapshots for display; the server owns every estimate and count.
@@ -15,14 +16,7 @@ export function EvidenceComparison({
     const previous = before.find(
       (item) => item.concept_id === current.concept_id,
     );
-    if (
-      !previous ||
-      (previous.mean === current.mean &&
-        previous.evidence_count === current.evidence_count &&
-        previous.interval90.lower === current.interval90.lower &&
-        previous.interval90.upper === current.interval90.upper)
-    )
-      return [];
+    if (!previous) return [];
     return [{ previous, current }];
   });
   return (
@@ -36,6 +30,7 @@ export function EvidenceComparison({
           {changes.map(({ previous, current }) => (
             <div key={current.concept_id}>
               <dt>{conceptName(current.concept_id)}</dt>
+              <dd><BetaDistributionPlot current={current} before={previous} /></dd>
               <dd>
                 Estimate: {percent(previous.mean)} →{" "}
                 <strong>{percent(current.mean)}</strong>

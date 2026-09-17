@@ -35,6 +35,8 @@ class Coordinator:
     teaching: Teaching
     course_progression: RuntimeAvailability | None = None
     remediation_catalog: RuntimeCatalog | None = None
+    practice_selection: object | None = None
+    evidence_eligible: bool = True
 
     async def run_turn(self, request: TurnRequest, question: Question,
                        state: LearnerState, history: list[HistoryEntry],
@@ -58,8 +60,16 @@ class Coordinator:
         with call_budget(ASSESSOR_BUDGET_SECONDS):
             assessment = await self.assessor.assess(question, request.answer)
         trace.append("assess")
-        update = self.learner.update(state, assessment, history)
+        evidence = assessment if self.evidence_eligible else assessment.model_copy(update={
+            "outcome": "unclear", "score": None, "misconception_id": None})
+        update = self.learner.update(state, evidence, history)
         trace.append("update")
+        if self.practice_selection is not None:
+            self.course_progression = self.practice_selection.availability(
+                self.remediation_catalog, update.concepts, history, question, assessment)
+            candidates = list(self.course_progression.candidates)
+            bindings = {c.candidate_id: c.model_dump() for c in candidates}
+            self.teaching.continuation_question_id = self.course_progression.next_concept_question_id
         decision = self.policy.choose(update.concepts, assessment, candidates, history)
         trace.append("select")
         # Snapshot policy authority before entering the replaceable teaching seam.
@@ -83,7 +93,7 @@ class Coordinator:
         if remediation is not None:
             remediation.focus = derive_focus(remediation.focus, assessment, update.evidence_applied,
                                               question.question_id, remediation.course_id)
-            if (self.remediation_catalog is not None
+            if (self.practice_selection is None and self.remediation_catalog is not None
                     and should_generate(remediation.focus, assessment, update.evidence_applied, decision)):
                 generation = asyncio.create_task(TargetedQuestionGenerator().generate(
                     self.remediation_catalog, remediation.focus, question.model_copy(deep=True),

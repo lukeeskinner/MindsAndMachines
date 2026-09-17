@@ -7,6 +7,8 @@
   },
   "concepts": [
     {
+      "alpha": 1,
+      "beta": 1,
       "concept_id": "bfs",
       "mean": 0.5,
       "interval90": {
@@ -16,6 +18,8 @@
       "evidence_count": 0
     },
     {
+      "alpha": 1,
+      "beta": 1,
       "concept_id": "ucs",
       "mean": 0.5,
       "interval90": {
@@ -25,6 +29,8 @@
       "evidence_count": 0
     },
     {
+      "alpha": 1,
+      "beta": 1,
       "concept_id": "astar",
       "mean": 0.5,
       "interval90": {
@@ -34,6 +40,8 @@
       "evidence_count": 0
     },
     {
+      "alpha": 1,
+      "beta": 1,
       "concept_id": "admissibility",
       "mean": 0.5,
       "interval90": {
@@ -43,6 +51,8 @@
       "evidence_count": 0
     },
     {
+      "alpha": 1,
+      "beta": 1,
       "concept_id": "consistency",
       "mean": 0.5,
       "interval90": {
@@ -52,6 +62,8 @@
       "evidence_count": 0
     },
     {
+      "alpha": 1,
+      "beta": 2,
       "concept_id": "admissibility_vs_consistency",
       "mean": 0.3333333333333333,
       "interval90": {
@@ -65,7 +77,7 @@
     "candidate_id": "relationship-example",
     "concept_id": "admissibility_vs_consistency",
     "kind": "worked_example",
-    "reason": "Worked example selected — selection priority 0.7833 from mastery gap 0.6667, uncertainty 0.7511, and misconception signal 1."
+    "reason": "Worked example selected \u2014 selection priority 0.7833 from mastery gap 0.6667, uncertainty 0.7511, and misconception signal 1."
   },
   "tutor": {
     "text": "Admissibility is a global bound: h(n) must not exceed the optimal remaining path cost h*(n). Consistency is a local constraint: h(n) \u2264 c(n,n\u2032) + h(n\u2032) on every edge.\n\nFor example, take S \u2192 A with cost 1 and A \u2192 G with cost 2. Set h(S)=3, h(A)=1 and h(G)=0. All estimates are admissible, but the S \u2192 A edge is inconsistent: 3 > 1 + 1.\n\nWith h(goal)=0, consistency implies admissibility. Admissibility alone does not guarantee consistency. Try checking both conditions on the fresh graph.",
@@ -89,7 +101,8 @@
         "id": "unsure",
         "text": "I'm not sure yet."
       }
-    ]
+    ],
+    "review": false
   },
   "mode": "dummy",
   "provider": "fake",
@@ -99,62 +112,135 @@
     "select",
     "teach"
   ],
+  "counts": {
+    "submitted_answers": 1,
+    "unique_questions_seen": 2,
+    "accepted_observations": 1
+  },
+  "session_start": [
+    {
+      "alpha": 1,
+      "beta": 1,
+      "concept_id": "bfs",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    },
+    {
+      "alpha": 1,
+      "beta": 1,
+      "concept_id": "ucs",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    },
+    {
+      "alpha": 1,
+      "beta": 1,
+      "concept_id": "astar",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    },
+    {
+      "alpha": 1,
+      "beta": 1,
+      "concept_id": "admissibility",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    },
+    {
+      "alpha": 1,
+      "beta": 1,
+      "concept_id": "consistency",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    },
+    {
+      "alpha": 1,
+      "beta": 1,
+      "concept_id": "admissibility_vs_consistency",
+      "mean": 0.5,
+      "interval90": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "evidence_count": 0
+    }
+  ],
   "flashcards": [
     {
       "card_id": "demo-card-6",
       "concept_id": "admissibility_vs_consistency",
       "front": "How are consistency and admissibility connected?",
       "back": "With nonnegative edge costs and h(goal)=0, consistency implies admissibility. An admissible heuristic can still violate consistency on an edge.",
-      "source": "Intro AI · study notes"
+      "source": "Intro AI \u00b7 study notes"
     },
     {
       "card_id": "demo-card-7",
       "concept_id": "admissibility_vs_consistency",
       "front": "How would you check both properties on a small graph?",
       "back": "First compute the cheapest remaining cost at each node and compare each estimate with that cost. Then check the consistency inequality separately on every edge.",
-      "source": "Intro AI · study notes"
+      "source": "Intro AI \u00b7 study notes"
     },
     {
       "card_id": "demo-card-1",
       "concept_id": "bfs",
       "front": "What order does breadth-first search explore?",
       "back": "It explores by depth: all nodes one edge away, then two edges away, and so on. With equal edge costs, this finds a shortest path.",
-      "source": "Intro AI · study notes"
+      "source": "Intro AI \u00b7 study notes"
     },
     {
       "card_id": "demo-card-2",
       "concept_id": "ucs",
       "front": "How does uniform-cost search choose its next node?",
       "back": "It expands the frontier node with the lowest accumulated path cost g(n). Unlike breadth-first search, it accounts for different edge costs.",
-      "source": "Intro AI · study notes"
+      "source": "Intro AI \u00b7 study notes"
     },
     {
       "card_id": "demo-card-3",
       "concept_id": "astar",
       "front": "What does A* combine in its priority f(n)?",
       "back": "f(n) = g(n) + h(n): the cost already paid to reach a node, plus an estimate of the remaining cost to a goal.",
-      "source": "Intro AI · study notes"
+      "source": "Intro AI \u00b7 study notes"
     },
     {
       "card_id": "demo-card-4",
       "concept_id": "admissibility",
       "front": "What does it mean for a heuristic to be admissible?",
-      "back": "At every node, its estimate is no greater than the actual cheapest remaining path cost: h(n) ≤ h*(n).",
-      "source": "Intro AI · study notes"
+      "back": "At every node, its estimate is no greater than the actual cheapest remaining path cost: h(n) \u2264 h*(n).",
+      "source": "Intro AI \u00b7 study notes"
     },
     {
       "card_id": "demo-card-5",
       "concept_id": "consistency",
       "front": "What local check defines a consistent heuristic?",
-      "back": "For every edge n → n′, h(n) ≤ c(n,n′) + h(n′). The estimate cannot drop by more than the cost of that step.",
-      "source": "Intro AI · study notes"
+      "back": "For every edge n \u2192 n\u2032, h(n) \u2264 c(n,n\u2032) + h(n\u2032). The estimate cannot drop by more than the cost of that step.",
+      "source": "Intro AI \u00b7 study notes"
     },
     {
       "card_id": "demo-card-8",
       "concept_id": "astar",
       "front": "What happens when A* uses h(n)=0 everywhere?",
       "back": "Its priority becomes g(n), so it orders the frontier like uniform-cost search. The zero heuristic is admissible and consistent for nonnegative edge costs.",
-      "source": "Intro AI · study notes"
+      "source": "Intro AI \u00b7 study notes"
     }
   ]
 }

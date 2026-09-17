@@ -74,7 +74,7 @@ it("preserves the quiz answer and flashcard position across modes and navigation
   await user.click(screen.getByRole("button", { name: "Practice quiz" }));
   expect((screen.getByRole("radio", { name: "Breadth first" }) as HTMLInputElement).checked).toBe(true);
   expect(fetch).toHaveBeenCalledTimes(1);
-  await user.click(screen.getByRole("button", { name: "New session / reset" }));
+  await user.click(screen.getByRole("button", { name: "New practice session" }));
   await user.click(await screen.findByRole("button", { name: "Flashcards", exact: true }));
   expect(screen.getByRole("heading", { name: cards[0].front })).toBeTruthy();
   expect(fetch).toHaveBeenCalledTimes(2);

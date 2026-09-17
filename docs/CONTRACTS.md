@@ -85,15 +85,14 @@ Python/TypeScript records and legacy-compatible storage field are documented in
 
 The learning-mode extension adds `question_count: number` and
 `flashcards: [{card_id, concept_id, front, back, source}]` to `SessionResponse`.
-The count is the actual course question-bank size. Flashcards deliberately expose
+The count is the practice-session budget; the public course summary retains the actual bank size. Flashcards deliberately expose
 study notes: authored Intro AI notes for the demo, or exact concept summaries and
 source filenames for uploaded courses. This is an explicit display projection,
 not serialization of question keys, rubrics, raw source records or provider data.
 Card navigation and self-ratings remain frontend session state and never call
 `/turns`, update learner estimates, or add evidence. Reset/course changes clear
 that review state. The assessment contract remains unchanged.
-New uploads contain 5–10 questions, while previously stored courses retain their
-existing bank size until reprocessed. The demo contains eight questions.
+Rich numbered-topic uploads can contain up to 20 questions (Calculus: 16); generic uploads retain the smaller bounded plan. Stored courses retain their bank until reprocessed. The built-in demo contains eight questions.
 
 Adaptive remediation adds `flashcards: Flashcard[]` to `TurnResponse`, using the
 same public card shape, ordered by the server after each assessment. The browser
@@ -109,7 +108,7 @@ are unchanged. See [adaptive remediation](ADAPTIVE_REMEDIATION.md).
 
 | Endpoint | Request | Response |
 | --- | --- | --- |
-| `POST /api/v1/sessions` | Optional `SessionRequest: {course_id?: string|null}`; empty/absent body supported | `session_id`, `course_id: string|null`, `question: PublicQuestion`, `concepts` |
+| `POST /api/v1/sessions` | Optional `SessionRequest: {course_id?: string|null, previous_session_id?: string|null, reset_learner?: boolean}`; empty/absent body supported | `session_id`, `course_id: string|null`, `question: PublicQuestion`, `concepts` |
 | `POST /api/v1/turns` | `session_id`, `question_id`, `answer: string`, optional `presentation_preferences: LearnerPresentationPreferences` | TurnResponse below |
 
 The course/session foundation adds optional course ownership. Omitted/null
@@ -117,8 +116,12 @@ The course/session foundation adds optional course ownership. Omitted/null
 session with its first public question and initial concept estimates; unknown IDs
 return 404 without creating state. Course turns return 409 before demo catalog
 lookup or Coordinator execution. Uploaded-course learning is not activated.
-Reset creates a new session: send the same `course_id` to retain course selection;
-omit it (or send null) to return to the demo. Existing sessions are unchanged.
+Practice again sends the same course_id and previous_session_id. It carries the
+profile forward and retires the old session (stale writes return 409).
+reset_learner=true with previous_session_id explicitly restores Beta(1,1) and
+clears exposure history. Without previous_session_id a new independent profile
+is created; reset_learner without a previous session returns 400. The previous
+session must match course and learner identity. No account lookup is implied.
 
 `PublicCourse` contains only `course_id`, `title`,
 `concepts: [{concept_id, display_name}]`, `source_filenames` and `question_count`.
@@ -157,3 +160,46 @@ The optional Curriculum/Planning role proposes approved Candidate IDs and short 
 ## Minimum verification
 
 One example payload and a small loop check verify the agreed fields, that all four seams are called, that only the targeted concept's canned estimate changes, and that teaching follows the selected decision. A small replacement test can inject another fake at one seam to demonstrate that callers are unchanged. The core smoke uses the actual API and browser flow. No generated-schema comparison, concurrent request test or elaborate semantic test matrix blocks G1.
+
+
+## Adaptive pools extension
+
+This authorized feature extends the shared contract; review Python types, TypeScript
+types, golden response and callers together before merge.
+
+- ConceptEstimate adds trusted integer alpha/beta (nullable/optional only for old
+  fixtures). Mean, equal-tail interval90 and evidence_count remain authoritative.
+  UI must not infer parameters from rounded numbers. Existing Bayesian math is unchanged.
+- PublicQuestion adds review=false. An exposed content fingerprint remains review
+  across linked sessions and receives assessment/teaching but no learner update.
+  Exposure is reserved when issued, including previewed or abandoned questions.
+- Both session and turn responses add session_start: ConceptEstimate[] and
+  counts: {submitted_answers, unique_questions_seen, accepted_observations}.
+  Submissions count successful turn records. Unique counts distinct IDs issued this
+  session, including next_question. Accepted counts only evidence_applied history
+  entries in this session; concept evidence_count is lifetime within the profile.
+- API-owned LearnerProfile holds beliefs, course/user identity, exposure fingerprints,
+  recent IDs, first-question history and active session. Practice Session holds its
+  own initial snapshot, budget, history, generated items, chat and current review flag.
+  The store adds load_profile and save_progress. Dynamo writes profile/session
+  together in one transaction and reads both consistently; memory copies both.
+- One active session per profile and the existing single-process write guard protect
+  turn/chat/retake/reset overlap. Duplicate or stale questions are rejected. These
+  are not distributed multi-worker concurrency guarantees.
+- PracticeSelection chooses evidence; AdaptivePolicy still chooses the intervention.
+  Rich pools use coverage, mastery gap and interval width, with one immediate fresh
+  same-concept retry after an error. Four concepts receive a 10-question budget.
+  Lifetime-unseen content is preferred; exhausted banks use labeled, uncounted
+  review without replacement within the session. No unbounded replenishment occurs.
+- Flashcards expose three distinct source excerpts per rich concept. Server priority
+  uses the same posterior; frontend rotation and ratings never submit evidence.
+- The memory default survives linked practice sessions, not process restart. A lost
+  browser handle starts a new anonymous profile. Dynamo durability does not add
+  account recovery or distributed locking.
+
+
+Rich source pools now use the generic exact-source recall protocol documented in
+ADAPTIVE_POOLS_REPORT.md. The visible prompt is server-constrained and asks for
+the original missing ending after a quoted prefix. The answer is the exact missing source ending; it remains an exact source substring. This is a literal-recall assessment contract, not a
+claim that generated free-form application distractors are semantically verified.
+No filename, title, subject name, or authored demo option selects production logic.

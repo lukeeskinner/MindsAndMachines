@@ -163,22 +163,46 @@ def topic_passages(passages):
     """
     sections = tuple(p for p in passages if re.match(r"^\d+[.)]\s+\S", p.label)
                      and len(p.answers) >= 2)
-    return sections[:5] if len(sections) >= 2 else ()
+    expanded = []
+    for section in sections[:5]:
+        index = passages.index(section)
+        next_index = next((i for i in range(index + 1, len(passages))
+                           if passages[i] in sections), len(passages))
+        support = [p.text for p in passages[index + 1:next_index]
+                   if p.chunk_id == section.chunk_id][:2]
+        facts = list(dict.fromkeys(a for _, a in section.answers[:2]))
+        facts.extend(text for text in support if text not in facts)
+        expanded.append(Passage(section.passage_id, section.chunk_id, section.text,
+                                section.label,
+                                tuple((section.chunk_id, a) for a in facts),
+                                tuple(facts[2:])))
+    if len(sections) >= 2:
+        return tuple(expanded)
+    rich = [p for p in passages if len(p.answers) >= 3][:5]
+    return tuple(Passage(p.passage_id, p.chunk_id, p.text, p.label,
+                         p.answers[:4], tuple(a for _, a in p.answers[2:4]))
+                 for p in rich)
 
 
 def fixed_topic_schema(passages):
     """Bind each response slot to its source in the schema, without model IDs."""
     properties = {}
     for ci, passage in enumerate(passages):
-        for qi in range(2):
+        for qi in range(2 + len(passage.extra_evidence)):
             schema = copy.deepcopy(_QUESTION_SCHEMA)
             schema["description"] = (f"Topic: {passage.label}. Write a question directly answered by: "
                                      + passage.answer_for_slot(qi))
             schema["properties"]["prompt"]["description"] = schema["description"]
+            if passage.is_pool:
+                schema["properties"]["prompt"]["enum"] = [passage.completion_prompt(qi)]
             schema["properties"]["assigned_answer_echo"] = {
                 "type": "string", "enum": [passage.answer_for_slot(qi)],
                 "description": "The supplied correct choice, copied exactly. All three wrong_option fields must be false alternatives."}
-            schema["required"].append("assigned_answer_echo")
+            # Put the supplied correct answer first so the model completes three
+            # false alternatives, rather than treating one distractor as a key.
+            schema["properties"] = {"assigned_answer_echo": schema["properties"]["assigned_answer_echo"],
+                                    **{k: v for k, v in schema["properties"].items() if k != "assigned_answer_echo"}}
+            schema["required"] = ["assigned_answer_echo", *schema["required"]]
             for field in WRONG_OPTION_FIELDS:
                 schema["properties"][field]["description"] = (
                     "An objectively FALSE alternative. The correct option is already assigned_answer_echo. "
@@ -193,7 +217,9 @@ def resolve_fixed_topics(data, passages):
     return {"concepts": [{"passage_id": p.passage_id,
                          "first_question": data[f"topic_{i + 1}_question_1"],
                          "second_question": data[f"topic_{i + 1}_question_2"],
-                         "additional_questions": []} for i, p in enumerate(passages)]}
+                         "additional_questions": [data[f"topic_{i + 1}_question_{j + 3}"]
+                                                  for j in range(len(p.extra_evidence))]}
+                        for i, p in enumerate(passages)]}
 
 
 def repair_slots(plan, passages, targets):
@@ -206,8 +232,10 @@ def repair_slots(plan, passages, targets):
             path = question_path(ci, qi)
             if path in targets:
                 slots.append({"question_id": path, "topic": passage.label,
-                              "source_text": passage.text,
+                              "source_text": " ".join((passage.text, *passage.extra_evidence)),
                               "assigned_answer": passage.answer_for_slot(qi)})
+                if passage.is_pool:
+                    slots[-1]["required_prompt"] = passage.completion_prompt(qi)
     return slots
 
 
@@ -235,12 +263,34 @@ class Passage:
     text: str
     label: str
     answers: tuple[tuple[str, str], ...]
+    extra_evidence: tuple[str, ...] = ()
+
+    @property
+    def is_pool(self):
+        return len(self.answers) >= 3 and bool(self.extra_evidence)
+
+    def completion_parts(self, index):
+        fact = self.answers[index % len(self.answers)][1]
+        words = fact.split()
+        size = max(2, min(len(words) - 3, len(words) // 2))
+        for i, word in enumerate(words[:size]):
+            if _FORBIDDEN_STEM_PATTERN.search(word):
+                size = max(2, i)
+                break
+        prefix = " ".join(words[:size])
+        return prefix, fact[len(prefix):].strip()
+
+    def completion_prompt(self, index):
+        prefix, _ = self.completion_parts(index)
+        return f"Source recall: Which ending completes the quoted statement «{prefix} …» using its exact original wording?"
 
     def answer_for_slot(self, index):
+        if self.is_pool:
+            return self.completion_parts(index)[1]
         return self.answers[index % len(self.answers)][1]
 
     def public_to_provider(self):
-        return {"passage_id": self.passage_id, "label": self.label, "text": self.text,
+        return {"passage_id": self.passage_id, "label": self.label, "text": " ".join((self.text, *self.extra_evidence)),
                 "question_answers": {"first_question": self.answer_for_slot(0),
                     "second_question": self.answer_for_slot(1),
                     "additional_questions": [self.answer_for_slot(i) for i in range(2, 5)]}}
@@ -328,9 +378,17 @@ def _resolve_question(item, passage, index, path):
             [{"question_id": path, "reason": "negative_question", "field": "prompt",
               "rule": "forbidden_whole_word_in_prompt", "matched_keywords": matched}])
     answer = passage.answer_for_slot(index)
+    if passage.is_pool and prompt != passage.completion_prompt(index):
+        raise QuestionValidationError("Question changed its exact-source completion task.",
+            [{"question_id": path, "reason": "source_mismatch", "field": "prompt"}])
     if contains_phrase(f"{passage.label}: {prompt}", answer):
         raise QuestionValidationError("Generated question prompt discloses its answer.",
             [{"question_id": path, "reason": "answer_leakage", "field": "prompt"}])
+    if passage.is_pool:
+        prefix = passage.completion_prompt(index).split("«", 1)[1].split(" …»", 1)[0]
+        if sum(a.startswith(prefix) for _, a in passage.answers) != 1:
+            raise QuestionValidationError("Source prefix has multiple completions.",
+                [{"question_id": path, "reason": "ambiguous_question", "field": "prompt"}])
     choices = [item[field] for field in WRONG_OPTION_FIELDS]
     answer_index = index % (len(choices) + 1)
     choices.insert(answer_index, answer)
@@ -361,7 +419,7 @@ def resolve_plan(data, passages: tuple[Passage, ...]):
         for index, item in enumerate((concept["first_question"], concept["second_question"], *extra)):
             path = question_path(concept_index, index)
             answer = passage.answer_for_slot(index)
-            if not isinstance(answer, str) or not answer.strip() or answer not in passage.text:
+            if not isinstance(answer, str) or not answer.strip() or not any(answer in text for text in (passage.text, *passage.extra_evidence)):
                 raise IngestionError("Assigned source answer is not grounded in its trusted passage.")
             try:
                 question = _resolve_question(item, passage, index, path)
@@ -377,8 +435,8 @@ def resolve_plan(data, passages: tuple[Passage, ...]):
                          "questions": questions,
                          "teaching": [{"kind": kind, "paragraphs": list(paragraphs), "source_refs": refs}
                                       for kind, paragraphs in PROCESS_TEMPLATES.items()]})
-    if total > 10:
-        raise IngestionError("Generated study bank exceeds ten question slots.")
+    if total > 20:
+        raise IngestionError("Generated study bank exceeds twenty question slots.")
     if failures:
         raise QuestionValidationError(first_error, failures,
                                       resolved={"concepts": concepts}, question_paths=paths)

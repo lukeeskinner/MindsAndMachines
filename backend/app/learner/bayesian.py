@@ -39,6 +39,7 @@ def _result(state: LearnerState, applied: bool) -> LearnerUpdate:
     concepts = [
         ConceptEstimate(
             concept_id=concept_id,
+            alpha=skill.alpha, beta=skill.beta,
             mean=skill.alpha / (skill.alpha + skill.beta),
             interval90={
                 "lower": round(_beta_quantile(0.05, skill.alpha, skill.beta), 4),
@@ -58,6 +59,9 @@ class BayesianLearner:
     freshness, unaided status and duplicate checks belong upstream. History is
     accepted for protocol compatibility and does not control these updates.
     """
+
+    def describe(self, state: LearnerState) -> LearnerUpdate:
+        return _result(state.model_copy(deep=True), False)
 
     def initial_state(self, concept_ids: list[str]) -> LearnerUpdate:
         if len(set(concept_ids)) != len(concept_ids):

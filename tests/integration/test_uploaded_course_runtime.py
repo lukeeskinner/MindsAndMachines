@@ -223,7 +223,8 @@ class UploadedCourseRuntimeTests(unittest.TestCase):
             self.provider.side_effect = AssertionError("No live model calls during runtime checks")
             runtime = build_runtime_catalog(course)
             session = self.start(public)
-            self.assertEqual(len(session["flashcards"]), len(course.concepts))
+            self.assertGreaterEqual(len(session["flashcards"]), len(course.concepts))
+            self.assertEqual(len({c["card_id"] for c in session["flashcards"]}), len(session["flashcards"]))
             question, seen = session["question"], set()
             for index in range(expected_count):
                 self.assertNotIn(question["question_id"], seen)

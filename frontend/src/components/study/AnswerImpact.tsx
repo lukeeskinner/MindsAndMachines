@@ -1,5 +1,6 @@
 import { useCourseLabels } from "../course/CourseContext";
 import { useId } from "react";
+import { BetaDistributionPlot } from "./BetaDistributionPlot";
 import {
   percent,
   intervalWidth,
@@ -26,6 +27,7 @@ export function AnswerImpact({ entry }: { entry: StudyEntry }) {
       <p className="impact-diagnosis">{result.assessment.feedback}</p>
       {comparable ? (
         <>
+          <BetaDistributionPlot current={current} before={previous} beforeLabel="before this answer" />
           <table className="snapshot-table">
             <caption className="sr-only">
               Before and after this answer for{" "}
@@ -118,8 +120,9 @@ export function AnswerImpact({ entry }: { entry: StudyEntry }) {
                 <span>{conceptName(result.next_question.concept_id)}</span>
                 <p>{result.next_question.prompt}</p>
                 <p className="impact-note">
-                  After the explanation, answer this question to provide the
-                  next observation. Only accepted evidence updates the estimate.
+                  {result.next_question.review
+                    ? "Review item: seen before. This answer will not add mastery evidence."
+                    : "After the explanation, answer this question to provide the next observation. Only accepted evidence updates the estimate."}
                 </p>
               </>
             ) : (

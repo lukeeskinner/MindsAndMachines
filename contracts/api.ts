@@ -5,12 +5,15 @@ export interface LearnerPresentationPreferences {
   concise: boolean;
 }
 export interface PublicQuestion {
+  review?: boolean;
   question_id: string;
   concept_id: string;
   prompt: string;
   choices: { id: string; text: string }[];
 }
 export interface ConceptEstimate {
+  alpha?: number | null;
+  beta?: number | null;
   concept_id: string;
   mean: number;
   interval90: { lower: number; upper: number };
@@ -28,6 +31,8 @@ export interface PublicCourse {
   question_count: number;
 }
 export interface SessionRequest {
+  previous_session_id?: string;
+  reset_learner?: boolean;
   course_id?: string | null;
 }
 export interface ChatRequest {
@@ -41,7 +46,14 @@ export interface ChatResponse {
   text: string;
   teaching_source: 'authored' | 'bedrock';
 }
+export interface PracticeCounts {
+  submitted_answers: number;
+  unique_questions_seen: number;
+  accepted_observations: number;
+}
 export interface SessionResponse {
+  counts?: PracticeCounts;
+  session_start?: ConceptEstimate[];
   session_id: string;
   course_id: string | null;
   question: PublicQuestion;
@@ -63,6 +75,8 @@ export interface TurnRequest {
   presentation_preferences?: LearnerPresentationPreferences;
 }
 export interface TurnResponse {
+  counts?: PracticeCounts;
+  session_start?: ConceptEstimate[];
   flashcards?: Flashcard[];
   session_id: string;
   assessment: {

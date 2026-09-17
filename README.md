@@ -2,7 +2,7 @@
 
 **G2 assessor runtime integration:** the adaptive demo uses RealAssessor, BayesianLearner, AdaptivePolicy and the existing Tutor. Answer-key grading is authoritative. Local assessment and teaching are deterministic; explicit Bedrock configuration enables bounded diagnosis and validated teaching prose with reviewed fallback. This scoped increment does not authorize deployment or further G2 work.
 
-**Uploaded-course integration:** PDF/PPTX uploads can now start course-bound learning sessions through those same seams, using course-specific questions and stored teaching. Concept progression continues until the uploaded study bank is exhausted. See the [integration handoff and manual Grad Algorithms walkthrough](docs/UPLOADED_COURSE_INTEGRATION.md).
+**Uploaded-course integration:** PDF/PPTX uploads can now start course-bound learning sessions through those same seams, using course-specific questions and stored teaching. Rich source-backed pools use bounded adaptive practice; smaller legacy banks retain their existing progression. See the [integration handoff and manual Grad Algorithms walkthrough](docs/UPLOADED_COURSE_INTEGRATION.md).
 
 The **Chatbot** supports session-scoped follow-up messages grounded in the selected
 course's public study notes. Bedrock mode makes a real bounded call; local mode
@@ -13,11 +13,28 @@ See [chat contracts and behavior](docs/CHAT.md).
 ## Run locally
 
 The study desk includes **Practice quiz** and **Flashcards**. The demo has eight
-questions and eight study cards. New uploads contain 5–10 questions across up to
-five source concepts, with source-backed concept summaries as flashcards. Bedrock
-plans vary the count with material breadth; local mode uses source-recall and
-masked-source exercises. Previously stored courses retain their bank size until
-reprocessed.
+questions and eight study cards. The known Calculus lecture requests four questions and produces three
+grounded cards per concept (up to 16 questions / 12 cards); at least three
+accepted questions per concept are required. Its definitions, rule details,
+examples and applications supply distinct source-recall probes. Rich numbered-topic sources
+require at least three accepted questions per concept after at most one repair.
+Smaller/generic sources retain their bounded 5–10-question generation path and
+may have smaller pools. Local mode uses source-recall and masked-source exercises.
+Previously stored courses retain their bank size until reprocessed.
+
+**Practice again / New practice session** preserves the current learner profile,
+starts a new bounded session, and prefers unseen/recently unused items.
+**Reset learner profile** asks for a second deliberate click before clearing
+evidence. These demo profiles persist across linked sessions in the running
+backend; browser reload loses the anonymous session handle and a memory-store
+restart clears data. This is not account-level profile recovery.
+
+The server separates submitted answers, unique questions issued (including the
+next-question preview), and accepted mastery observations this session. Previously
+exposed items are labeled review and add no new evidence, even when answered
+correctly. Flashcard use and chat never change mastery. Beta plots use server-owned
+alpha/beta, mean and 90% interval; recap curves compare session start to session end.
+See the [adaptive pools implementation and live audit](docs/ADAPTIVE_POOLS_REPORT.md).
 
 Flashcards support answer reveal, previous/next arrows, topic filtering, and
 **Got it / Review again**. Browsing does not mark a card reviewed. After a pass,
@@ -28,7 +45,8 @@ evidence or invoke the provider.
 After a quiz answer, the server prioritizes existing flashcards using the same
 Bayesian estimates and trusted remediation focus as the question mode. A new
 assessment refreshes deck order while retaining self-ratings. In Bedrock mode,
-an accepted incorrect answer can produce one source-grounded, session-only
+a rich pool selects a different unseen same-concept item after an incorrect answer.
+Smaller legacy banks can produce one source-grounded, session-only
 replacement for the policy's fresh question slot. Local mode keeps the existing
 bank. See [adaptive remediation](docs/ADAPTIVE_REMEDIATION.md) for triggers,
 privacy, validation limits and verification.
@@ -74,7 +92,7 @@ The smoke starts/stops its own server on an available loopback port. No separate
 3. See an incorrect diagnosis, a **Socratic hint** and its selection reason, and guidance labeled **Authored teaching** in default local mode. Only the relationship concept changes: mean `0.3333333333333333`, interval `[0.0253, 0.7764]`, evidence count 1.
 4. On the graph with h(S)=6 and h(A)=4, choose **A: Both admissible and consistent**, then submit. The same concept becomes mean `0.5`, interval `[0.1354, 0.8646]`, count 2. A **Diagnostic probe** introduces a fresh graph.
 5. On the graph with h(S)=5 and h(A)=1, choose **A: Admissible, but not consistent**. A **Worked example** introduces the original transfer question. Choose **B: Admissible, but not consistent**, then answer the four additional transfer/reasoning questions C, B, C, B to complete the eight-question demo. The relationship concept now has eight observations; other concepts never change.
-6. Select **plain language / explain jargon**, **step-by-step**, and **concise**; click **New session / reset**. The initial question/state return and the checkboxes stay selected.
+6. Select **plain language / explain jargon**, **step-by-step**, and **concise**; click **Reset learner profile**, then **Erase evidence and restart**. The initial question/state return and the checkboxes stay selected.
 7. Repeat A, A, A, B, C, B, C, B. Teaching becomes short plain-language numbered steps. Assessment, estimates, intervals, evidence counts, interventions and next questions match the first run. Changing a checkbox does not submit an answer or alter a prior response.
 
 The screen rounds percentages to one decimal; the API returns Bayesian estimates. “I'm not sure yet” uses reviewed fallback without adding evidence. Teaching alone never increases an estimate.
@@ -113,8 +131,17 @@ misleading negative stems, or source-overlapping distractors permit one targeted
 repair with machine-readable question paths and failure reasons. The server applies
 only those question patches, preserves valid questions and source assignments, and
 revalidates the surviving bank. A question still invalid after repair is omitted;
-the course is accepted only if every concept retains at least one usable grounded
-question. Private metadata records degraded generation and repaired/discarded counts.
+rich numbered-topic courses require at least three safe questions per concept;
+narrow legacy sources require at least one. Rich pools use a generic exact-source completion protocol: the server fixes a
+distinct source statement, a quoted prefix, and its missing ending, and Bedrock proposes alternative
+endings. The prompt explicitly asks for the exact missing source text. Options show only
+endings, so the cue cannot reveal the key by prefix matching.
+Candidate validation enforces that task, source/key identity, positive wording,
+unique content and absence of alternative exact source statements. There are no
+document-specific recipes. These are source-recall assessments, not validated
+concept-application MCQs. Arbitrary semantic equivalence cannot be proven by
+literal checks or an additional Nova review; source truth still needs review.
+Sparse legacy sources retain their earlier generation and review limitations. Private metadata records degraded generation and repaired/discarded counts.
 Both attempts share a 90-second total generation deadline. A failed or malformed
 repair can preserve the valid initial bank; initial provider failures, invalid
 passage IDs, duplicate concepts, and trusted source/answer integrity failures remain

@@ -23,6 +23,7 @@ logger = logging.getLogger("uvicorn.error.ingestion")
 # Only fixed codes reach logs. Never log exception text, source content or a
 # provider response; validation exceptions may retain private materials.
 _FAILURE_REASONS = {
+    "The source supports a practice pool but fewer than three safe questions survived.": "insufficient_safe_pool",
     "Generated JSON has missing or unexpected fields.": "generated_schema",
     "Generated text is empty, invalid, or too long.": "generated_text_bounds",
     "Generated list has an invalid type or size.": "generated_list_bounds",

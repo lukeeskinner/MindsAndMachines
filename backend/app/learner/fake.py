@@ -17,7 +17,7 @@ class FakeLearner:
         for concept_id, skill in state.skills.items():
             value = VALUES[skill.evidence_count]
             concepts.append(ConceptEstimate(
-                concept_id=concept_id, mean=value["mean"],
+                concept_id=concept_id, mean=value["mean"], alpha=skill.alpha, beta=skill.beta,
                 interval90={"lower": value["lower"], "upper": value["upper"]},
                 evidence_count=skill.evidence_count,
             ))

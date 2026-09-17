@@ -69,7 +69,7 @@ class CourseRegistryTests(unittest.TestCase):
         self.assertEqual(adapted.question.model_dump(), {
             "question_id": source.question_id, "concept_id": source.concept_id,
             "prompt": source.prompt, "choices": [{"id": c.id, "text": c.text} for c in source.choices],
-            "answer_key": source.answer_key, "rubric": source.explanation,
+            "answer_key": source.answer_key, "rubric": source.explanation, "review": False,
         })
         self.assertEqual(adapted.source_refs, source.source_refs)
         for ref in adapted.source_refs:
@@ -80,7 +80,7 @@ class CourseRegistryTests(unittest.TestCase):
             self.assertEqual(chunk.location_kind, "slide")
             self.assertGreater(chunk.number, 0)
         public = adapted.question.public().model_dump()
-        self.assertEqual(set(public), {"question_id", "concept_id", "prompt", "choices"})
+        self.assertEqual(set(public), {"question_id", "concept_id", "prompt", "choices", "review"})
         self.assertEqual(public["choices"], [{"id": c.id, "text": c.text} for c in source.choices])
         self.assertNotIn("unsure", [choice["id"] for choice in public["choices"]])
 

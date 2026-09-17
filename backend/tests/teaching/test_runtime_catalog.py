@@ -78,7 +78,7 @@ class RuntimeCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.catalog.question_provenance[question.question_id], source.source_refs)
             self.assertEqual(question.choices[-1].id, "unsure")
             self.assertNotEqual(question.answer_key, "unsure")
-            self.assertEqual(set(question.public().model_dump()), {"question_id", "concept_id", "prompt", "choices"})
+            self.assertEqual(set(question.public().model_dump()), {"question_id", "concept_id", "prompt", "choices", "review"})
 
     async def test_unsure_is_unscored_by_existing_assessor(self):
         with patch.dict(os.environ, {"MODEL_PROVIDER": "fake"}), patch(

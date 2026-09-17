@@ -71,3 +71,11 @@ it("shows turn-ranked review cards in the existing workspace without submitting 
   await user.click(screen.getByRole("button", { name: "Got it" }));
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+it("rotates within a weak concept when updated priority would repeat the current card", async () => {
+ const cards = [1,2,3].map(i=>({card_id:String(i),concept_id:"weak",front:`Idea ${i}`,back:`Detail ${i}`,source:"Notes"}));
+ const {rerender}=render(<Flashcards cards={cards} names={{weak:"Weak concept"}}/>);
+ expect(screen.getByRole("heading",{name:"Idea 1"})).toBeTruthy();
+ rerender(<Flashcards cards={[cards[0],cards[2],cards[1]]} names={{weak:"Weak concept"}}/>);
+ expect(screen.getByRole("heading",{name:"Idea 3"})).toBeTruthy();
+});

@@ -59,7 +59,7 @@ class BaselineTests(unittest.TestCase):
         self.assertEqual({**first, "session_id": "example-session"}, json.loads(FIXTURE.read_text(encoding="utf-8")))
         second = self.answer({"session_id": session["session_id"], "question": first["next_question"]}, "b")
         self.assertEqual(second["assessment"]["outcome"], "correct")
-        self.assertEqual(target(second), {"concept_id": TARGET, "mean": 0.5,
+        self.assertEqual(target(second), {"alpha": 2, "beta": 2, "concept_id": TARGET, "mean": 0.5,
             "interval90": {"lower": 0.1354, "upper": 0.8646}, "evidence_count": 2})
         self.assertIsNone(second["next_question"])
         self.assertIsNone(second["decision"])
@@ -102,7 +102,7 @@ class BaselineTests(unittest.TestCase):
         # A second incorrect answer differs from the fake's canned golden path.
         second = self.answer({"session_id": session["session_id"],
                               "question": first["next_question"]}, "b")
-        self.assertEqual(target(second), {"concept_id": TARGET, "mean": 0.25,
+        self.assertEqual(target(second), {"alpha": 1, "beta": 3, "concept_id": TARGET, "mean": 0.25,
             "interval90": {"lower": 0.017, "upper": 0.6316}, "evidence_count": 2})
         # q04 is consistent; its wrong answer does not demonstrate that
         # admissibility implies consistency. The policy gets no diagnosis signal.

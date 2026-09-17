@@ -20,7 +20,7 @@ it("sends session-only context, prevents duplicate requests and preserves conver
  await user.type(screen.getByRole("textbox",{name:"Your message"}),response.message);
  await user.click(screen.getByRole("button",{name:"Send",exact:true}));
  expect((screen.getByRole("button",{name:"Send"}) as HTMLButtonElement).disabled).toBe(true);
- expect((screen.getByRole("button",{name:"New session / reset"}) as HTMLButtonElement).disabled).toBe(true);
+ expect((screen.getByRole("button",{name:"New practice session"}) as HTMLButtonElement).disabled).toBe(true);
  await user.click(screen.getByRole("button",{name:"Send"}));
  expect(fetch).toHaveBeenCalledTimes(2);
  expect(fetch.mock.calls[1][0]).toBe("/api/v1/chat");
@@ -32,7 +32,7 @@ it("sends session-only context, prevents duplicate requests and preserves conver
  await user.click(screen.getByRole("tab",{name:"Chatbot",exact:true}));
  expect(screen.getByText(response.text)).toBeTruthy();
  fetch.mockResolvedValueOnce(ok({...initial,session_id:"s2"}));
- await user.click(screen.getByRole("button",{name:"New session / reset"}));
+ await user.click(screen.getByRole("button",{name:"New practice session"}));
  await screen.findByRole("radio");await user.click(screen.getByRole("tab",{name:"Chatbot",exact:true}));
  expect(screen.queryByText(response.text)).toBeNull();
 });

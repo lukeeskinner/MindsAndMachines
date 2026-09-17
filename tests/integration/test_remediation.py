@@ -102,7 +102,7 @@ class RemediationIntegrationTests(unittest.TestCase):
         self.assertEqual(record.question.answer_key, "a")
         self.assertTrue(record.question.rubric)
         self.assertNotEqual(body["next_question"]["question_id"], session["question"]["question_id"])
-        self.assertEqual(set(body["next_question"]), {"question_id", "concept_id", "prompt", "choices"})
+        self.assertEqual(set(body["next_question"]), {"question_id", "concept_id", "prompt", "choices", "review"})
         self.assertNotIn("remediation_focus", body)
         self.assertNotIn("source_quote", response.text)
         self.assertNotIn("correct_choice_id", response.text)

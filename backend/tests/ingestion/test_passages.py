@@ -135,10 +135,12 @@ class PassagePlanTests(unittest.TestCase):
         first, second = passage("p1", "1. Power Rule"), passage("p3", "2. Chain Rule")
         generic = passage("p2", "Useful comparison")
         selected = topic_passages((first, generic, second))
-        self.assertEqual(selected, (first, second))
-        self.assertIs(selected[0], first)
+        self.assertEqual([p.passage_id for p in selected], [first.passage_id, second.passage_id])
+        self.assertEqual(selected[0].answers[:2], tuple((first.chunk_id, a) for _, a in first.answers))
+        self.assertEqual(selected[0].extra_evidence, (generic.text,))
+        self.assertEqual(selected[0].text, first.text)
         self.assertEqual(topic_passages((first, generic)), ())
-        self.assertEqual(len(fixed_topic_schema(selected)["required"]), 4)
+        self.assertEqual(len(fixed_topic_schema(selected)["required"]), 5)
 
     def test_formula_distractor_cannot_evade_overlap_with_terminal_punctuation(self):
         text = "Power Rule: f'(x) = n x^(n-1): multiply by the exponent. Constants stay in front."
@@ -225,8 +227,8 @@ class PassagePlanTests(unittest.TestCase):
         for count, extra, expected in ((1, 0, 2), (1, 3, 5), (5, 0, 10)):
             result = resolve_plan({"concepts": [concept(i, extra) for i in range(count)]}, passages)
             self.assertEqual(sum(len(c["questions"]) for c in result["concepts"]), expected)
-        with self.assertRaisesRegex(IngestionError, "exceeds ten"):
-            resolve_plan({"concepts": [concept(0, 1), *[concept(i, 0) for i in range(1, 5)]]}, passages)
+        with self.assertRaisesRegex(IngestionError, "exceeds twenty"):
+            resolve_plan({"concepts": [concept(0, 3), *[concept(i, 2) for i in range(1, 5)]]}, passages)
 
     def test_source_windows_preserve_source_and_stable_ids(self):
         text = ('A long sentence describing a mathematical relationship. ' * 50).strip()

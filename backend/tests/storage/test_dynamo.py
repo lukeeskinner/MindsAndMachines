@@ -14,11 +14,19 @@ from contracts.models import ChatExchange, HistoryEntry, LearnerState, SkillStat
 class FakeTable:
     def __init__(self):
         self.items: dict[str, dict] = {}
+        from types import SimpleNamespace
+        self.name = "test"
+        self.meta = SimpleNamespace(client=self)
+
+    def transact_write_items(self, TransactItems):
+        for entry in TransactItems:
+            self.put_item(entry["Put"]["Item"])
+
 
     def put_item(self, Item):
         self.items[Item["session_id"]] = Item
 
-    def get_item(self, Key):
+    def get_item(self, Key, **kwargs):
         item = self.items.get(Key["session_id"])
         return {"Item": item} if item is not None else {}
 
@@ -64,7 +72,8 @@ class DynamoStoreTests(unittest.TestCase):
         self.assertEqual(self.store.load_session(session_id).course_id, "course-1")
         data = json.loads(self.store._table.items[session_id]["data"])
         self.assertEqual(set(data), {"question_id", "learner_state", "history", "user_id", "course_id",
-                                     "remediation_focus", "generated_questions", "chat_history"})
+                                     "remediation_focus", "generated_questions", "chat_history",
+                                     "profile_id", "session_start", "budget", "current_review"})
 
     def test_legacy_session_without_course_id_still_loads(self):
         session_id = self.store.new_session("q1", LearnerState(skills={}))

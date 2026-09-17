@@ -21,6 +21,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import type {
+  PracticeCounts,
   ConceptEstimate,
   Flashcard,
   LearnerPresentationPreferences,
@@ -41,6 +42,7 @@ import { motion, MotionConfig, useReducedMotion } from "motion/react";
 import { post, requestErrorMessage } from "./lib/api";
 import { createSession, CourseError } from "./lib/courses";
 import { CourseBoundary, useCourseLabels } from "./components/course/CourseContext";
+import { BetaDistributionPlot } from "./components/study/BetaDistributionPlot";
 import { AnswerImpact } from "./components/study/AnswerImpact";
 import { Flashcards } from "./components/study/Flashcards";
 import {
@@ -182,6 +184,9 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
   const shortNames = activeCourse ? names : demoShortNames;
   const courseDraft = course.draft;
   const changeCourse = course.onChange;
+  const [counts, setCounts] = useState<PracticeCounts | null>(null);
+  const [sessionStart, setSessionStart] = useState<ConceptEstimate[]>([]);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState<PublicQuestion | null>(null);
   const [concepts, setConcepts] = useState<ConceptEstimate[]>([]);
@@ -213,13 +218,16 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
   const complete = !!sessionId && !question;
   const review = reviewing ? latest : undefined;
 
-  async function newSession() {
+  async function newSession(resetLearner = false) {
     if (requestInFlight.current) return;
     requestInFlight.current = true;
     setBusy(true);
     setError("");
     try {
-      const result = await createSession(activeCourse);
+      const result = await createSession(activeCourse, sessionId || undefined, resetLearner);
+      setCounts(result.counts ?? null);
+      setSessionStart(result.session_start?.length ? result.session_start : result.concepts);
+      setConfirmReset(false);
       setSessionId(result.session_id);
       setQuestion(result.question);
       setConcepts(result.concepts);
@@ -286,6 +294,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
         ...previous,
         { question, answer, result, before: concepts },
       ]);
+      setCounts(result.counts ?? null);
       setConcepts(result.concepts);
       setQuestion(result.next_question);
       if (result.flashcards) setFlashcards(result.flashcards);
@@ -441,7 +450,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                 className="px-2 sm:px-4"
               >
                 <RotateCcw size={15} />
-                <span>New session / reset</span>
+                <span>New practice session</span>
               </Button>
             </div>
           </header>
@@ -692,8 +701,10 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                         >
                           {names[question.concept_id] ?? question.concept_id}
                         </h2>
+                        {question.review && <p className="review-notice">Review item · Seen before. This answer will not add mastery evidence.</p>}
                         <form onSubmit={submit}>
-                          <fieldset disabled={busy || !!error}>
+                          <fieldset disabled={busy || !!error} data-question-id={question.question_id}
+                            data-concept-id={question.concept_id}>
                             <legend className="question-prompt">
                               {question.prompt}
                             </legend>
@@ -781,13 +792,15 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                           <strong>{entries.length}</strong>
                           <span>questions answered</span>
                           <strong>
-                            {concepts.reduce((count, c) => count + c.evidence_count, 0)}
+                            {counts?.accepted_observations ?? concepts.reduce((count, c) => count + c.evidence_count, 0) - sessionStart.reduce((count, c) => count + c.evidence_count, 0)}
                           </strong>
-                          <span>accepted observations</span>
+                          <span>accepted observations this session</span>
+                          <strong>{counts?.unique_questions_seen ?? new Set(entries.map(e => e.question.question_id)).size}</strong>
+                          <span>unique questions seen</span>
                         </div>
                         {entries[0] && (
                           <EvidenceComparison
-                            before={entries[0].before}
+                            before={sessionStart}
                             after={concepts}
                           />
                         )}
@@ -806,7 +819,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                           </Button>
                         </div>
                         <p className="subtle">
-                          Completion records practice, not proven mastery.
+                          Practice again carries your understanding model forward. Completion records practice, not proven mastery.
                         </p>
                       </Scene>
                     )}
@@ -903,7 +916,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                             <h3>{names[selectedConcept] ?? selectedConcept}</h3>
                             <p>
                               {selected.evidence_count
-                                ? `${selected.evidence_count} accepted observations in this session.`
+                                ? `${selected.evidence_count} accepted observations across practice sessions.`
                                 : "No answers have supplied evidence for this concept yet."}
                             </p>
                           </div>
@@ -1102,6 +1115,8 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                               </span>
                             )}
                           </span>
+                          <BetaDistributionPlot current={concept} compact />
+                          <small>{concept.evidence_count} observations</small>
                           <strong>
                             {concept.evidence_count
                               ? pct(concept.mean)
@@ -1130,6 +1145,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                         Understanding estimate:{" "}
                         <strong>{pct(selected.mean)}</strong>
                       </p>
+                      <BetaDistributionPlot current={selected} />
                       <Estimate concept={selected} />
                       <p>
                         {selected.evidence_count === 0
@@ -1138,6 +1154,12 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                       </p>
                     </div>
                   )}
+                  <Button variant="ghost" disabled={busy} onClick={() => setConfirmReset(true)}>Reset learner profile</Button>
+                  {confirmReset && <div role="group" aria-label="Confirm learner reset">
+                    <p>Erase accumulated evidence and return every concept to its starting distribution?</p>
+                    <Button disabled={busy} onClick={() => void newSession(true)}>Erase evidence and restart</Button>
+                    <Button variant="ghost" onClick={() => setConfirmReset(false)}>Keep my evidence</Button>
+                  </div>}
                   <Disclosure title="How to read these estimates">
                     <p>
                       Experimental predicted success on similar unaided

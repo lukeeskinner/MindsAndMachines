@@ -17,6 +17,7 @@ class PublicQuestion(Record):
     concept_id: str
     prompt: str
     choices: list[Choice]
+    review: bool = False
 
 
 class Question(PublicQuestion):
@@ -54,6 +55,8 @@ class Interval(Record):
 
 
 class ConceptEstimate(Record):
+    alpha: int | None = Field(default=None, ge=1)
+    beta: int | None = Field(default=None, ge=1)
     concept_id: str
     mean: float
     interval90: Interval
@@ -139,6 +142,8 @@ class TurnRequest(Record):
 
 
 class SessionRequest(Record):
+    previous_session_id: str | None = None
+    reset_learner: bool = False
     course_id: str | None = Field(default=None, min_length=1)
 
 
@@ -168,12 +173,20 @@ class Flashcard(Record):
     source: str
 
 
+class PracticeCounts(Record):
+    submitted_answers: int = 0
+    unique_questions_seen: int = 0
+    accepted_observations: int = 0
+
+
 class SessionResponse(Record):
     session_id: str
     course_id: str | None = None
     question: PublicQuestion
     concepts: list[ConceptEstimate]
     question_count: int = Field(default=0, ge=0)
+    counts: PracticeCounts = Field(default_factory=PracticeCounts)
+    session_start: list[ConceptEstimate] = Field(default_factory=list)
     flashcards: list[Flashcard] = Field(default_factory=list)
 
 
@@ -188,4 +201,6 @@ class TurnResponse(Record):
     mode: Literal["dummy", "live"] = "dummy"
     provider: Literal["fake", "bedrock"] = "fake"
     trace: list[str]
+    counts: PracticeCounts = Field(default_factory=PracticeCounts)
+    session_start: list[ConceptEstimate] = Field(default_factory=list)
     flashcards: list[Flashcard] = Field(default_factory=list)

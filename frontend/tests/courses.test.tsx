@@ -101,9 +101,9 @@ describe("truthful course upload", () => {
     await user.click(screen.getByRole("button", { name: "Activate course" }));
     await screen.findByRole("radio", { name: "Answer for Cell biology" });
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ course_id: "biology" });
-    await user.click(screen.getByRole("button", { name: "New session / reset" }));
+    await user.click(screen.getByRole("button", { name: "New practice session" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
-    expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toEqual({ course_id: "biology" });
+    expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toEqual({ course_id: "biology", previous_session_id: "biology-session", reset_learner: false });
     await user.click(screen.getByRole("tab", { name: "Materials" }));
     await user.click(screen.getByRole("button", { name: "Use demo course" }));
     await screen.findByRole("radio", { name: demo.question.choices[0].text });
@@ -246,9 +246,9 @@ describe("course activation and isolation", () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ course_id: algorithms.course_id });
     expect(document.body.textContent).toContain("Dynamic programming");
     expect(document.body.textContent).not.toMatch(/Introduction to AI|Search & heuristics|Admissibility|admissible|consistent heuristic/);
-    await user.click(screen.getByRole("button", { name: "New session / reset" }));
+    await user.click(screen.getByRole("button", { name: "New practice session" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ course_id: algorithms.course_id });
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ course_id: algorithms.course_id, previous_session_id: algorithms.course_id + "-session", reset_learner: false });
   });
 
   it("sends course_id, renders dynamic labels everywhere, and resets within the course while preserving preferences", async () => {
@@ -266,9 +266,9 @@ describe("course activation and isolation", () => {
     const selected = screen.getByRole("region", { name: "Selected concept evidence" });
     expect(selected.textContent).toContain("Cell membranes");
     expect(selected.textContent).toContain("50.0%");
-    await user.click(screen.getByRole("button", { name: "New session / reset" }));
+    await user.click(screen.getByRole("button", { name: "New practice session" }));
     await screen.findByRole("radio", { name: "Answer for Cell biology" });
-    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toEqual({ course_id: "biology" });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toEqual({ course_id: "biology", previous_session_id: "biology-session", reset_learner: false });
     expect(screen.getByRole("switch", { name: /Keep it concise/ }).getAttribute("aria-checked")).toBe("true");
   });
 
@@ -313,10 +313,10 @@ describe("course activation and isolation", () => {
     const user = await materials(readyAdapter());
     await uploadAndActivate(user);
     fetchMock.mockResolvedValueOnce(response({ detail: "private stack trace" }, 404));
-    await user.click(screen.getByRole("button", { name: "New session / reset" }));
+    await user.click(screen.getByRole("button", { name: "New practice session" }));
     expect((await screen.findByRole("alert")).textContent).toContain("course is no longer available");
     expect(document.body.textContent).not.toContain("private stack trace");
-    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toEqual({ course_id: "biology" });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toEqual({ course_id: "biology", previous_session_id: "biology-session", reset_learner: false });
     expect(screen.getByRole("radio", { name: "Answer for Cell biology" }).closest("fieldset")?.disabled).toBe(true);
   });
 

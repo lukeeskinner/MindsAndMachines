@@ -202,7 +202,7 @@ describe("study desk interactions", () => {
     ).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     await user.click(
-      screen.getByRole("button", { name: "New session / reset" }),
+      screen.getByRole("button", { name: "New practice session" }),
     );
     await screen.findByRole("radio", { name: firstQuestion.choices[0].text });
     expect(
@@ -215,7 +215,7 @@ describe("study desk interactions", () => {
         name: /Admissibility vs consistency.*No evidence/,
       }),
     ).toBeTruthy();
-    expect(screen.getByText("0 observations")).toBeTruthy();
+    expect(screen.getAllByText("0 observations").length).toBeGreaterThan(0);
     await user.click(screen.getByRole("tab", { name: "Session activity" }));
     expect(
       screen.getByRole("heading", { name: "Your thinking starts here." }),
@@ -318,7 +318,7 @@ describe("study desk interactions", () => {
     expect(draft.value).toContain("with smaller steps.");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await user.click(
-      screen.getByRole("button", { name: "New session / reset" }),
+      screen.getByRole("button", { name: "New practice session" }),
     );
     await screen.findByRole("radio", { name: firstQuestion.choices[0].text });
     await user.click(screen.getByRole("tab", { name: "Chatbot" }));
@@ -667,22 +667,22 @@ describe("adaptive evidence and trust", () => {
     });
     setToken("synthetic-current-token");
     await user.click(
-      screen.getByRole("button", { name: "New session / reset" }),
+      screen.getByRole("button", { name: "New practice session" }),
     );
     await screen.findByRole("radio", { name: firstQuestion.choices[0].text });
     expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe(
       "Bearer synthetic-current-token",
     );
-    expect(fetchMock.mock.calls[2][1].body).toBe("{}");
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({previous_session_id: initial.session_id, reset_learner: false});
     setToken();
     await user.click(
-      screen.getByRole("button", { name: "New session / reset" }),
+      screen.getByRole("button", { name: "New practice session" }),
     );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     expect(fetchMock.mock.calls[3][1].headers).toEqual({
       "Content-Type": "application/json",
     });
-    expect(fetchMock.mock.calls[3][1].body).toBe("{}");
+    expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toEqual({previous_session_id: initial.session_id, reset_learner: false});
   });
 });
 
@@ -702,4 +702,27 @@ it("moves the evidence inspector to the next concept and restores it when revisi
   expect(screen.getByRole("button", {name:"Check answer"}).hasAttribute("disabled")).toBe(true);
   await user.click(screen.getByRole("button", {name:"Revisit the explanation"}));
   expect(document.querySelector(".concept-detail")!.textContent).toBe(before);
+});
+
+it("carries trusted posterior into a retake and resets only after deliberate confirmation", async () => {
+  fetchMock.mockResolvedValueOnce(respond(fixture));
+  const user = await start();
+  await user.click(screen.getByRole("radio", {name:firstQuestion.choices[0].text}));
+  await user.click(screen.getByRole("button", {name:"Check answer"}));
+  await screen.findByRole("region",{name:"What changed?"});
+  fetchMock.mockResolvedValueOnce(respond({...initial,session_id:"retake",concepts:fixture.concepts,
+    session_start:fixture.concepts,question:{...firstQuestion,question_id:"fresh-item"}}));
+  await user.click(screen.getByRole("button",{name:"New practice session"}));
+  await screen.findByRole("radio",{name:firstQuestion.choices[0].text});
+  expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({previous_session_id:initial.session_id,reset_learner:false});
+  expect(screen.getByRole("button",{name:/Admissibility vs consistency.*33.3%/})).toBeTruthy();
+  await user.click(screen.getByRole("button",{name:"Reset learner profile"}));
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  await user.click(screen.getByRole("button",{name:"Keep my evidence"}));
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  await user.click(screen.getByRole("button",{name:"Reset learner profile"}));
+  fetchMock.mockResolvedValueOnce(respond({...initial,session_id:"reset"}));
+  await user.click(screen.getByRole("button",{name:"Erase evidence and restart"}));
+  await screen.findByRole("radio",{name:firstQuestion.choices[0].text});
+  expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toEqual({previous_session_id:"retake",reset_learner:true});
 });

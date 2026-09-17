@@ -1,4 +1,4 @@
-"""DynamoDB-backed session persistence: the same three-method seam as
+"""DynamoDB-backed session persistence: the same session/profile seam as
 MemoryStore (CONTRACTS.md), so callers never change. Selected in main.py
 only when DYNAMODB_TABLE_NAME is set; the in-memory G1 default is
 unaffected when unconfigured.
@@ -8,7 +8,8 @@ import os
 from typing import Any
 from uuid import uuid4
 
-from backend.app.storage.memory import Session
+from backend.app.storage.memory import Session, LearnerProfile
+from dataclasses import asdict
 from contracts.models import ChatExchange, HistoryEntry, LearnerState
 from backend.app.teaching.remediation import RemediationFocus
 from backend.app.teaching.targeted_questions import GeneratedQuestion
@@ -34,7 +35,7 @@ class DynamoStore:
         return session_id
 
     def load_session(self, session_id: str) -> Session:
-        response = self._table.get_item(Key={"session_id": session_id})
+        response = self._table.get_item(Key={"session_id": session_id}, ConsistentRead=True)
         item = response.get("Item")
         if item is None:
             raise KeyError(session_id)
@@ -45,6 +46,10 @@ class DynamoStore:
             history=[HistoryEntry(**entry) for entry in data["history"]],
             user_id=data.get("user_id"),
             course_id=data.get("course_id"),
+            profile_id=data.get("profile_id"),
+            session_start=LearnerState(**data["session_start"]) if data.get("session_start") else None,
+            budget=data.get("budget", 0),
+            current_review=data.get("current_review", False),
             remediation_focus=RemediationFocus(**data["remediation_focus"]) if data.get("remediation_focus") else None,
             chat_history=[ChatExchange(**entry) for entry in data.get("chat_history", [])],
             generated_questions={key: GeneratedQuestion(**value)
@@ -54,8 +59,12 @@ class DynamoStore:
     def save_session(self, session_id: str, session: Session) -> None:
         self._put(session_id, session)
 
-    def _put(self, session_id: str, session: Session) -> None:
+    def _data(self, session: Session):
         data = {
+            "profile_id": session.profile_id,
+            "session_start": session.session_start.model_dump() if session.session_start else None,
+            "budget": session.budget,
+            "current_review": session.current_review,
             "chat_history": [entry.model_dump() for entry in session.chat_history],
             "question_id": session.question_id,
             "learner_state": session.learner_state.model_dump(),
@@ -65,4 +74,23 @@ class DynamoStore:
             "remediation_focus": session.remediation_focus.model_dump() if session.remediation_focus else None,
             "generated_questions": {key: value.model_dump() for key, value in session.generated_questions.items()},
         }
-        self._table.put_item(Item={"session_id": session_id, "data": json.dumps(data)})
+        return json.dumps(data)
+
+    def _put(self, session_id: str, session: Session) -> None:
+        self._table.put_item(Item={"session_id": session_id, "data": self._data(session)})
+
+    def load_profile(self, profile_id: str):
+        item = self._table.get_item(Key={"session_id": "profile:" + profile_id}, ConsistentRead=True).get("Item")
+        if item is None:
+            raise KeyError(profile_id)
+        data = json.loads(item["data"])
+        data["state"] = LearnerState(**data["state"])
+        return LearnerProfile(**data)
+
+    def save_progress(self, session_id: str, session: Session, profile_id: str, profile):
+        data = asdict(profile)
+        data["state"] = profile.state.model_dump()
+        items = [{"session_id": session_id, "data": self._data(session)},
+                 {"session_id": "profile:" + profile_id, "data": json.dumps(data)}]
+        self._table.meta.client.transact_write_items(TransactItems=[
+            {"Put": {"TableName": self._table.name, "Item": item}} for item in items])
