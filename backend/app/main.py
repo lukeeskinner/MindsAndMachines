@@ -26,7 +26,7 @@ def create_app(coordinator: Coordinator | None = None, *,
         # Reuse the stateless assessment/learner/policy seams, never the demo Tutor.
         return Coordinator(coordinator.assessor, coordinator.learner, coordinator.policy,
                            Tutor(runtime, continuation_question_id=availability.next_concept_question_id),
-                           course_progression=availability)
+                           course_progression=availability, remediation_catalog=runtime)
 
     log_configuration("runtime_start")
     app = FastAPI(title="Minds & Machines — learning lab", docs_url=None, redoc_url=None)

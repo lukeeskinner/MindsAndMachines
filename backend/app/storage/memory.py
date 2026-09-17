@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from uuid import uuid4
 from contracts.models import HistoryEntry, LearnerState
+from backend.app.teaching.remediation import RemediationFocus
+from backend.app.teaching.targeted_questions import GeneratedQuestion
 
 
 @dataclass
@@ -11,6 +13,8 @@ class Session:
     history: list[HistoryEntry] = field(default_factory=list)
     user_id: str | None = None
     course_id: str | None = None
+    remediation_focus: RemediationFocus | None = None
+    generated_questions: dict[str, GeneratedQuestion] = field(default_factory=dict)
 
 
 class MemoryStore:

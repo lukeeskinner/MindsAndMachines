@@ -81,9 +81,21 @@ source filenames for uploaded courses. This is an explicit display projection,
 not serialization of question keys, rubrics, raw source records or provider data.
 Card navigation and self-ratings remain frontend session state and never call
 `/turns`, update learner estimates, or add evidence. Reset/course changes clear
-that review state. The assessment and turn contracts remain unchanged.
+that review state. The assessment contract remains unchanged.
 New uploads contain 5–10 questions, while previously stored courses retain their
 existing bank size until reprocessed. The demo contains eight questions.
+
+Adaptive remediation adds `flashcards: Flashcard[]` to `TurnResponse`, using the
+same public card shape, ordered by the server after each assessment. The browser
+accepts an absent list for compatibility with older responses. No focus,
+misconception tags, source evidence or numeric review priorities are added to the
+card or question contracts. Existing public assessment diagnosis fields are
+unchanged. `Session` privately stores the latest unresolved `RemediationFocus`
+and a registry of generated questions with course identity, replaced bank slot,
+private key/rubric and provenance. Dynamo reads default missing fields for legacy
+sessions. Coordinator's optional `remediation` keyword carries API-owned scratch
+results committed only after successful completion; the four domain interfaces
+are unchanged. See [adaptive remediation](ADAPTIVE_REMEDIATION.md).
 
 | Endpoint | Request | Response |
 | --- | --- | --- |

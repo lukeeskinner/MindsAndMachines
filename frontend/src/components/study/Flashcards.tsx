@@ -13,8 +13,21 @@ export function Flashcards({ cards, names }: { cards: Flashcard[]; names: Record
   const again = deck.filter(card => ratings[card.card_id] === "again");
   const reviewed = deck.filter(card => ratings[card.card_id]).length;
   const heading = useRef<HTMLHeadingElement>(null);
+  const previousCards = useRef(cards);
   const card = deck[index];
   const ids = [...new Set(cards.map(c => c.concept_id))];
+  useEffect(() => {
+    const unchanged = previousCards.current.length === cards.length &&
+      previousCards.current.every((card, index) =>
+        (["card_id", "concept_id", "front", "back", "source"] as const)
+          .every(field => card[field] === cards[index][field]));
+    previousCards.current = cards;
+    if (unchanged) return;
+    // Refresh only when card content/order changes. An unchanged deck from a
+    // quiz turn preserves browsing, reveal, self-ratings and review-again passes.
+    setDeck(cards.filter(c => !filter || c.concept_id === filter));
+    setIndex(0); setRevealed(false);
+  }, [cards]);
   useEffect(() => { if (index > 0) heading.current?.focus({ preventScroll: true }); }, [index]);
 
   function start(next: Flashcard[]) {
