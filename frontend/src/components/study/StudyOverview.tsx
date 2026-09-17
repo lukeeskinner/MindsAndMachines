@@ -1,3 +1,4 @@
+import { useCourseLabels } from "../course/CourseContext";
 import {
   ArrowRight,
   BookOpen,
@@ -13,7 +14,7 @@ import type {
 } from "../../../../contracts/api";
 import { formatDate, goals, type CourseDraft } from "../onboarding/model";
 import { Button, Disclosure } from "../ui/primitives";
-import { activityNames, conceptName, percent, type StudyEntry } from "./model";
+import { activityNames, percent, type StudyEntry } from "./model";
 import { TeachingSource } from "./TeachingSource";
 
 type Props = {
@@ -39,6 +40,7 @@ export function StudyOverview({
   onConcept,
   onMaterials,
 }: Props) {
+  const { conceptName, course } = useCourseLabels();
   const latest = entries.at(-1);
   const focusId = latest?.question.concept_id ?? question?.concept_id;
   const focus = concepts.find((concept) => concept.concept_id === focusId);
@@ -115,7 +117,7 @@ export function StudyOverview({
           >
             <h2 id="overview-plan-title">Your study plan</h2>
             <p className="overview-plan-course">
-              {draft.courseName.trim() || "Your course"}
+              {course?.title ?? (draft.courseName.trim() || "Your course")}
             </p>
             <dl>
               <div>
@@ -144,7 +146,8 @@ export function StudyOverview({
               Edit course & goals <ArrowRight size={15} aria-hidden="true" />
             </button>
             <p className="overview-footnote">
-              Local setup only. Files and goals are not supplied to the tutor.
+              {course ? `Sources: ${course.source_filenames.join(", ")}. ${course.question_count} course questions. Goals remain local.`
+                : "Local setup only. Files and goals are not supplied to the tutor."}
             </p>
           </section>
         </div>
@@ -241,7 +244,7 @@ export function StudyOverview({
               <ArrowRight size={17} aria-hidden="true" />
             </Button>
             <p className="overview-footnote">
-              Practice uses the Intro AI question set. Presentation preferences
+              {course ? `Practice uses ${course.title}.` : "Practice uses the Intro AI question set."} Presentation preferences
               change wording, not evidence.
             </p>
           </section>

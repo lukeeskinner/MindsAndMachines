@@ -24,7 +24,6 @@ import type {
   ConceptEstimate,
   LearnerPresentationPreferences,
   PublicQuestion,
-  SessionResponse,
   TurnRequest,
   TurnResponse,
 } from "../../contracts/api";
@@ -38,7 +37,9 @@ import {
   Scene,
 } from "./components/ui/primitives";
 import { motion, MotionConfig, useReducedMotion } from "motion/react";
-import { post } from "./lib/api";
+import { post, requestErrorMessage } from "./lib/api";
+import { createSession, CourseError } from "./lib/courses";
+import { CourseBoundary, useCourseLabels } from "./components/course/CourseContext";
 import { AnswerImpact } from "./components/study/AnswerImpact";
 import {
   TeachingSource,
@@ -51,13 +52,12 @@ import { initialDraft, type CourseDraft } from "./components/onboarding/model";
 import { EvidenceComparison } from "./components/study/EvidenceComparison";
 import { TeachingPreferences } from "./components/study/TeachingPreferences";
 import {
-  conceptNames as names,
   intervalWidth,
   activityNames,
   type StudyEntry,
 } from "./components/study/model";
 
-const shortNames: Record<string, string> = {
+const demoShortNames: Record<string, string> = {
   bfs: "BFS",
   ucs: "UCS",
   astar: "A*",
@@ -71,12 +71,11 @@ const stages: Record<string, string> = {
   select: "Next activity",
   teach: "Teaching response",
 };
-const focusConcept = "admissibility_vs_consistency";
-const groups = [
+const demoGroups = [
   { name: "Search strategies", ids: ["bfs", "ucs", "astar"] },
   {
     name: "Heuristic properties",
-    ids: ["admissibility", "consistency", focusConcept],
+    ids: ["admissibility", "consistency", "admissibility_vs_consistency"],
   },
 ];
 const defaults: LearnerPresentationPreferences = {
@@ -155,22 +154,37 @@ function Trace({ result }: { result: TurnResponse }) {
   );
 }
 
-export function App({
-  onEditSetup,
-  course,
-}: {
+type AppProps = {
   onEditSetup?: () => void;
   course?: { draft: CourseDraft; onChange: (draft: CourseDraft) => void };
-} = {}) {
+};
+export function App(props: AppProps = {}) {
+  return <CourseBoundary><CourseWorkspace {...props} /></CourseBoundary>;
+}
+function CourseWorkspace(props: AppProps) {
+  const { course } = useCourseLabels();
+  const [preferences, setPreferences] = useState(defaults);
   const [localDraft, setLocalDraft] = useState(initialDraft);
-  const courseDraft = course?.draft ?? localDraft;
-  const changeCourse = course?.onChange ?? setLocalDraft;
+  // A new course has a fresh UI lifetime: answers, chat, evidence and pending
+  // responses from the previous course cannot leak into it. Preferences survive.
+  return <LearningWorkspace key={course ? `course:${course.course_id}` : "demo"} {...props}
+    course={props.course ?? { draft: localDraft, onChange: setLocalDraft }}
+    preferences={preferences} setPreferences={setPreferences} />;
+}
+function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }: AppProps & {
+  course: NonNullable<AppProps["course"]>;
+  preferences: LearnerPresentationPreferences;
+  setPreferences: (value: LearnerPresentationPreferences) => void;
+}) {
+  const { course: activeCourse, title: courseTitle, names } = useCourseLabels();
+  const shortNames = activeCourse ? names : demoShortNames;
+  const courseDraft = course.draft;
+  const changeCourse = course.onChange;
   const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState<PublicQuestion | null>(null);
   const [concepts, setConcepts] = useState<ConceptEstimate[]>([]);
   const [entries, setEntries] = useState<StudyEntry[]>([]);
   const [answer, setAnswer] = useState("");
-  const [preferences, setPreferences] = useState(defaults);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [view, setView] = useState("study");
@@ -178,10 +192,14 @@ export function App({
     "vertical",
   );
   const [reviewing, setReviewing] = useState(false);
-  const [selectedConcept, setSelectedConcept] = useState(focusConcept);
+  const [selectedConcept, setSelectedConcept] = useState("");
   const requestInFlight = useRef(false);
   const focusHeading = useRef<HTMLHeadingElement>(null);
   const latest = entries.at(-1);
+  const focusConcept = question?.concept_id ?? latest?.question.concept_id ?? "";
+  const groups = activeCourse
+    ? [{ name: "Course concepts", ids: concepts.map(c => c.concept_id) }]
+    : demoGroups.map(group => ({ ...group, ids: group.ids.filter(id => concepts.some(c => c.concept_id === id)) }));
   const selected = concepts.find(
     (concept) => concept.concept_id === selectedConcept,
   );
@@ -194,7 +212,7 @@ export function App({
     setBusy(true);
     setError("");
     try {
-      const result = await post<SessionResponse>("sessions", {});
+      const result = await createSession(activeCourse);
       setSessionId(result.session_id);
       setQuestion(result.question);
       setConcepts(result.concepts);
@@ -202,10 +220,10 @@ export function App({
       setAnswer("");
       setReviewing(false);
       setView("study");
-      setSelectedConcept(focusConcept);
+      setSelectedConcept(result.question.concept_id);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to start your session.",
+        err instanceof CourseError ? err.message : requestErrorMessage(err),
       );
     } finally {
       requestInFlight.current = false;
@@ -215,6 +233,9 @@ export function App({
   useEffect(() => {
     void newSession();
   }, []);
+  useEffect(() => {
+    if (sessionId) focusHeading.current?.focus({ preventScroll: true });
+  }, [sessionId]);
   useEffect(() => {
     if (!window.matchMedia) return;
     const media = window.matchMedia("(max-width: 560px)");
@@ -243,6 +264,14 @@ export function App({
     };
     try {
       const result = await post<TurnResponse>("turns", request);
+      const allowed = new Set(concepts.map(c => c.concept_id));
+      if (result.session_id !== sessionId || result.concepts.length !== allowed.size ||
+          new Set(result.concepts.map(c => c.concept_id)).size !== allowed.size ||
+          result.concepts.some(c => !allowed.has(c.concept_id)) ||
+          (result.next_question && !allowed.has(result.next_question.concept_id)) ||
+          (result.decision && !allowed.has(result.decision.concept_id))) {
+        throw new Error("Mismatched course response");
+      }
       setEntries((previous) => [
         ...previous,
         { question, answer, result, before: concepts },
@@ -254,7 +283,7 @@ export function App({
       setSelectedConcept(question.concept_id);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to check your answer.",
+        requestErrorMessage(err),
       );
     } finally {
       requestInFlight.current = false;
@@ -301,7 +330,7 @@ export function App({
               <BookOpen size={18} />
             </span>
             <span>
-              Introduction to AI<small>Search & heuristics</small>
+              {courseTitle}<small>{activeCourse ? "Uploaded course" : "Search & heuristics"}</small>
             </span>
           </div>
           <TabsList className="navigation-list" aria-label="Learning workspace">
@@ -339,7 +368,7 @@ export function App({
               aria-label="Concept map"
             >
               <Network size={19} />
-              Concept map<span className="nav-count">6</span>
+              Concept map<span className="nav-count">{concepts.length}</span>
             </TabsTrigger>
             <TabsTrigger
               value="activity"
@@ -372,7 +401,7 @@ export function App({
             </div>
             <div className="demo-label">
               <span />
-              Adaptive learning demo
+              {activeCourse ? "Uploaded course session" : "Adaptive learning demo"}
             </div>
             <p className="rail-footnote">Teaching source shown per response.</p>
           </div>
@@ -380,9 +409,9 @@ export function App({
         <div className="app-main">
           <header className="topbar">
             <div className="breadcrumbs">
-              <span>Introduction to AI</span>
+              <span>{courseTitle}</span>
               <ChevronRight size={14} />
-              <strong>Search & heuristics</strong>
+              <strong>{activeCourse ? "Course practice" : "Search & heuristics"}</strong>
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-1 sm:gap-3">
               {onEditSetup && (
@@ -430,7 +459,7 @@ export function App({
                       : view === "chatbot"
                         ? "Your study context, answers, and explanations together."
                         : view === "map"
-                          ? "Six concepts, with room for uncertainty."
+                          ? `${concepts.length} concepts, with room for uncertainty.`
                           : view === "materials"
                             ? "Keep your notes and study goals close at hand."
                             : "Your answers, feedback, and next steps in one place."}
@@ -540,8 +569,7 @@ export function App({
                           : "done"
                       }
                     >
-                      <b>{entries.length ? <Check size={13} /> : "01"}</b>The
-                      relationship
+                      <b>{entries.length ? <Check size={13} /> : "01"}</b>{activeCourse ? "Course question" : "The relationship"}
                     </span>
                     <span className="path-rule" />
                     <span
@@ -735,16 +763,14 @@ export function App({
                           A connection worth keeping.
                         </h2>
                         <p>
-                          You worked through the relationship and a fresh
-                          example. Explore what changed, or try the same loop
-                          with a different explanation style.
+                          Review your course practice and what changed, or start
+                          a new session with a different explanation style.
                         </p>
                         <div className="recap-line">
                           <strong>{entries.length}</strong>
                           <span>questions answered</span>
                           <strong>
-                            {concepts.find((c) => c.concept_id === focusConcept)
-                              ?.evidence_count ?? 0}
+                            {concepts.reduce((count, c) => count + c.evidence_count, 0)}
                           </strong>
                           <span>accepted observations</span>
                         </div>
@@ -796,7 +822,7 @@ export function App({
                     <div className="map-header">
                       <div>
                         <p className="eyebrow">CONCEPT MAP</p>
-                        <h2>Search & heuristics</h2>
+                        <h2>{activeCourse ? courseTitle : "Search & heuristics"}</h2>
                       </div>
                       <span className="map-key">
                         <span className="tiny-dot" />
@@ -810,7 +836,7 @@ export function App({
                     <div className="concept-map">
                       <div className="map-root">
                         <Network size={19} />
-                        Graph search
+                        {activeCourse ? courseTitle : "Graph search"}
                       </div>
                       <div className="map-branches">
                         {groups.map((group) => (
@@ -829,7 +855,7 @@ export function App({
                                     onClick={() => setSelectedConcept(id)}
                                   >
                                     <span className="map-node-title">
-                                      {shortNames[id]}
+                                      {shortNames[id] ?? names[id] ?? id}
                                       {id === focusConcept && (
                                         <span className="tiny-dot" />
                                       )}
@@ -861,7 +887,7 @@ export function App({
                         <div className="map-selection">
                           <div>
                             <span className="eyebrow">SELECTED CONCEPT</span>
-                            <h3>{names[selectedConcept]}</h3>
+                            <h3>{names[selectedConcept] ?? selectedConcept}</h3>
                             <p>
                               {selected.evidence_count
                                 ? `${selected.evidence_count} accepted observations in this session.`
@@ -1041,7 +1067,7 @@ export function App({
                 <section className="knowledge-panel">
                   <div className="inspector-heading">
                     <h2>Your understanding</h2>
-                    <span className="tag">6 concepts</span>
+                    <span className="tag">{concepts.length} concepts</span>
                   </div>
                   <p className="inspector-description">
                     Mastery estimates, with uncertainty.
@@ -1056,7 +1082,7 @@ export function App({
                           aria-pressed={selectedConcept === concept.concept_id}
                         >
                           <span className="concept-row-title">
-                            {names[concept.concept_id]}
+                            {names[concept.concept_id] ?? concept.concept_id}
                             {concept.concept_id === focusConcept && (
                               <span className="concept-practice-label">
                                 Practicing
@@ -1079,7 +1105,7 @@ export function App({
                   {selected && (
                     <div className="concept-detail" key={selected.concept_id}>
                       <div className="detail-heading">
-                        <span>{shortNames[selected.concept_id]}</span>
+                        <span>{shortNames[selected.concept_id] ?? selected.concept_id}</span>
                         <span>
                           {selected.evidence_count}{" "}
                           {selected.evidence_count === 1

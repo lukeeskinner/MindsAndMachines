@@ -185,7 +185,7 @@ describe("course onboarding", () => {
     const course = screen.getByRole("textbox", { name: "Course name" });
     await user.clear(course);
     await user.type(course, "My AI course");
-    const file = new File(["notes"], "my-notes.txt", { type: "text/plain" });
+    const file = new File(["notes"], "my-notes.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText("Choose course materials"), file);
     await user.click(
       screen.getByRole("button", { name: "Open practice demo" }),
@@ -207,7 +207,7 @@ describe("course onboarding", () => {
         .value,
     ).toBe("My AI course");
     expect(
-      screen.getByRole("button", { name: "Remove my-notes.txt" }),
+      screen.getByRole("button", { name: "Remove my-notes.pdf" }),
     ).toBeTruthy();
     await user.click(
       screen.getByRole("button", { name: "Open practice demo" }),
@@ -227,7 +227,7 @@ describe("course onboarding", () => {
     const user = await signIn();
     await user.upload(
       screen.getByLabelText("Choose course materials"),
-      new File(["notes"], "lecture.txt"),
+      new File(["notes"], "lecture.pdf"),
     );
     await user.click(
       screen.getByRole("button", { name: "Open practice demo" }),
@@ -239,7 +239,7 @@ describe("course onboarding", () => {
     await user.click(screen.getByRole("tab", { name: "Chatbot" }));
     await user.click(screen.getByRole("button", { name: "Manage materials" }));
     expect(
-      screen.getByRole("button", { name: "Remove lecture.txt" }),
+      screen.getByRole("button", { name: "Remove lecture.pdf" }),
     ).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Edit course goals" }));
     const name = screen.getByRole("textbox", { name: "Course name" });
@@ -256,16 +256,16 @@ describe("course onboarding", () => {
     // File changes during editing must not be overwritten by saving goal fields.
     await user.upload(
       screen.getByLabelText("Add materials to workspace"),
-      new File(["reading"], "reading.md"),
+      new File(["reading"], "reading.pptx"),
     );
     await user.click(
-      screen.getByRole("button", { name: "Remove lecture.txt" }),
+      screen.getByRole("button", { name: "Remove lecture.pdf" }),
     );
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     expect(screen.getByText("Changes saved in this tab.")).toBeTruthy();
     expect(screen.getByText("Algorithms seminar")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Remove reading.md" }),
+      screen.getByRole("button", { name: "Remove reading.pptx" }),
     ).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Edit course goals" }));
     await user.clear(screen.getByRole("textbox", { name: "Course name" }));
@@ -286,10 +286,10 @@ describe("course onboarding", () => {
     ).toBe("Algorithms seminar");
     expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("3");
     expect(
-      screen.getByRole("button", { name: "Remove reading.md" }),
+      screen.getByRole("button", { name: "Remove reading.pptx" }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Remove lecture.txt" }),
+      screen.queryByRole("button", { name: "Remove lecture.pdf" }),
     ).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/sessions");

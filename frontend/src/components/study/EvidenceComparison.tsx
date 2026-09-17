@@ -1,5 +1,6 @@
+import { useCourseLabels } from "../course/CourseContext";
 import type { ConceptEstimate } from "../../../../contracts/api";
-import { conceptName, percent, intervalWidth } from "./model";
+import { percent, intervalWidth } from "./model";
 
 // Compare public snapshots for display; the server owns every estimate and count.
 export function EvidenceComparison({
@@ -9,6 +10,7 @@ export function EvidenceComparison({
   before: ConceptEstimate[];
   after: ConceptEstimate[];
 }) {
+  const { conceptName } = useCourseLabels();
   const changes = after.flatMap((current) => {
     const previous = before.find(
       (item) => item.concept_id === current.concept_id,

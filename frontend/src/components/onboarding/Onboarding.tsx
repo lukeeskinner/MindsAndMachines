@@ -18,6 +18,8 @@ import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 import { Scene } from "../ui/primitives";
 import { Materials } from "./Materials";
+import { CourseUpload } from "../course/CourseUpload";
+import { useCourse } from "../course/CourseContext";
 import {
   formatDate,
   goals,
@@ -47,6 +49,9 @@ export function Onboarding({
   onSignOut?: () => void;
   signedInEmail?: string;
 }) {
+  const course = useCourse();
+  const selectedCourse = course?.selectedCourse;
+  const uploaded = course && course.upload.status !== "idle";
   const [active, setActive] = useState(0);
   const [ready, setReady] = useState(false);
   const [errors, setErrors] = useState<DraftErrors>({});
@@ -191,7 +196,7 @@ export function Onboarding({
                 className="text-xs text-muted-foreground"
                 onClick={onContinue}
               >
-                Open practice demo
+                {selectedCourse ? "Continue selected course" : "Open practice demo"}
                 <ArrowRight size={14} />
               </Button>
               {onSignOut && (
@@ -279,13 +284,14 @@ export function Onboarding({
                           <FileText size={15} />
                           <span className="truncate">{file.name}</span>
                           <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                            Local only
+                            {uploaded ? "See upload status" : "Local only"}
                           </span>
                         </li>
                       ))}
                     </ul>
                   )}
                 </section>
+                <CourseUpload files={draft.files} title={draft.courseName} onActivated={onContinue} />
                 <div className="demo-handoff">
                   <Waypoints size={21} />
                   <div>
@@ -293,9 +299,9 @@ export function Onboarding({
                       Try the learning experience
                     </h2>
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                      The practice demo uses our Intro AI questions. Your
-                      materials and goals are a local draft; they haven’t
-                      generated a study plan yet.
+                      {selectedCourse
+                        ? `Selected course: ${selectedCourse.title}. Your next session uses this course’s questions.`
+                        : "The practice demo uses our Intro AI questions. Activate a processed course to study its questions. Goals remain a local draft."}
                     </p>
                   </div>
                 </div>
@@ -305,7 +311,7 @@ export function Onboarding({
                     Edit setup
                   </Button>
                   <Button onClick={onContinue}>
-                    Open practice demo
+                    {selectedCourse ? "Continue selected course" : "Open practice demo"}
                     <ArrowRight size={17} />
                   </Button>
                 </div>
@@ -340,7 +346,7 @@ export function Onboarding({
                       onChange={(event) =>
                         update("courseName", event.target.value)
                       }
-                      placeholder="e.g. Introduction to AI"
+                      placeholder="e.g. Cell biology"
                       maxLength={100}
                       autoComplete="off"
                       required
@@ -372,6 +378,7 @@ export function Onboarding({
                       <h2>Course materials</h2>
                       <span className="optional-label">Optional</span>
                     </div>
+                    <CourseUpload files={draft.files} title={draft.courseName} onActivated={onContinue} />
                     <Materials
                       files={draft.files}
                       onChange={(files) => update("files", files)}
