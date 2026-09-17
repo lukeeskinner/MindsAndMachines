@@ -104,7 +104,10 @@ class BaselineTests(unittest.TestCase):
                               "question": first["next_question"]}, "b")
         self.assertEqual(target(second), {"concept_id": TARGET, "mean": 0.25,
             "interval90": {"lower": 0.017, "upper": 0.6316}, "evidence_count": 2})
-        self.assertEqual(second["decision"]["kind"], "worked_example")
+        # q04 is consistent; its wrong answer does not demonstrate that
+        # admissibility implies consistency. The policy gets no diagnosis signal.
+        self.assertIsNone(second["assessment"]["misconception_id"])
+        self.assertEqual(second["decision"]["kind"], "diagnostic_probe")
         for result in [first, second]:
             self.assertEqual([c for c in result["concepts"] if c["concept_id"] != TARGET],
                              [c for c in session["concepts"] if c["concept_id"] != TARGET])

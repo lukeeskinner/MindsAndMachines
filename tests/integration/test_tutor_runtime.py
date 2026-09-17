@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from botocore.exceptions import ClientError
 
-from backend.app.agents.assessor import FakeAssessor
+from backend.app.agents.real_assessor import RealAssessor
 from backend.app.agents.coordinator import Coordinator
 from backend.app.agents.provider import ProviderError
 from backend.app.learner.bayesian import BayesianLearner
@@ -55,7 +55,7 @@ class TutorRuntimeTests(unittest.TestCase):
         with patch("backend.app.main.Coordinator", wraps=Coordinator) as compose:
             create_app()
         assessor, learner, policy, teaching = compose.call_args.args
-        self.assertIs(type(assessor), FakeAssessor)
+        self.assertIs(type(assessor), RealAssessor)
         self.assertIs(type(learner), BayesianLearner)
         self.assertIs(type(policy), AdaptivePolicy)
         self.assertIs(type(teaching), Tutor)
@@ -73,7 +73,7 @@ class TutorRuntimeTests(unittest.TestCase):
         self.assertEqual((result["mode"], result["provider"]), ("dummy", "fake") if fallback else ("live", "bedrock"))
         self.assertEqual(result["next_question"]["question_id"], "relationship-q04")
         self.assertEqual(result["decision"]["candidate_id"], "relationship-hint")
-        self.sdk.converse.assert_called_once()
+        self.assertEqual(self.sdk.converse.call_count, 2)  # Assessment and Tutor, once each.
         stored = self.store.load_session(self.session["session_id"])
         self.assertEqual(stored.question_id, "relationship-q04")
         self.assertEqual(stored.learner_state.skills["admissibility_vs_consistency"].evidence_count, 1)
@@ -99,7 +99,7 @@ class TutorRuntimeTests(unittest.TestCase):
         self.assertIsNone(final.json()["next_question"])
         self.assertEqual(final.json()["tutor"]["teaching_source"], "authored")
         self.assertEqual(final.json()["provider"], "fake")
-        self.assertEqual(self.sdk.converse.call_count, 3)  # Completion never generates.
+        self.assertEqual(self.sdk.converse.call_count, 7)  # Four assessments; three Tutor generations.
         stored = self.store.load_session(self.session["session_id"])
         self.assertEqual(len(stored.history), 4)
         self.assertEqual(stored.learner_state.skills["admissibility_vs_consistency"].evidence_count, 4)
@@ -167,7 +167,7 @@ class TutorRuntimeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertIn("configuration error", response.json()["detail"])
         self.assertEqual(self.store.load_session(self.session["session_id"]), original)
-        self.factory.assert_not_called()
+        self.assertEqual(self.sdk.converse.call_count, 2)  # Assessment precedes each integration error.
 
     def test_server_diagnostics_distinguish_failures_without_logging_secrets(self):
         secret = "DO_NOT_LOG_CREDENTIAL_TOKEN_PROMPT_OR_OUTPUT"
@@ -195,7 +195,7 @@ class TutorRuntimeTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["tutor"]["teaching_source"], source)
                 self.assertEqual(response.json()["next_question"]["question_id"], "relationship-q04")
-                self.sdk.converse.assert_called_once()
+                self.assertEqual(self.sdk.converse.call_count, 2)  # Assessment and Tutor, once each.
                 logs = "\n".join(captured.output)
                 self.assertIn("runtime_start pid=", logs)
                 self.assertIn("configured_provider='bedrock'", logs)

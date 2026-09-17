@@ -1,7 +1,7 @@
-"""Inactive MC assessor: trusted grading, optional bounded Bedrock diagnosis.
+"""Runtime MC assessor: trusted grading, optional bounded Bedrock diagnosis.
 
 The current catalog has no misconception registry. Reuse only the diagnosis
-already authored in FakeAssessor, scoped to its two reviewed questions. New
+already authored in FakeAssessor, scoped to reviewed question/choice pairs. New
 content needs an explicit vocabulary review; unknown items get no diagnosis.
 """
 import json
@@ -16,7 +16,10 @@ from contracts.models import Assessment, Question
 MAX_FEEDBACK_LENGTH = 500
 MAX_RESPONSE_LENGTH = 4096
 _MISCONCEPTION = "admissible_means_consistent"
-_REVIEWED_QUESTIONS = frozenset({"relationship-q01", "relationship-q02"})
+# q03's rubric explicitly identifies this confusion for choice b. Its choice c
+# and q04's errors do not support this diagnosis: q04 is actually consistent.
+_REVIEWED_CHOICES = {"relationship-q01": "a", "relationship-q02": "a", "relationship-q03": "b"}
+_REVIEWED_FEEDBACK = "The distinction to revisit: an admissible heuristic need not be consistent."
 _FEEDBACK = {
     "correct": "Your selection is correct.",
     "incorrect": "Your selection is incorrect. Revisit the conditions in the question.",
@@ -117,7 +120,7 @@ def _enrichment(raw: str, question: Question, outcome: str,
 
 
 class RealAssessor:
-    """Implements Assessor.assess without changing or activating the runtime seam."""
+    """Grade from the trusted key; enrich at most once, without changing evidence."""
 
     async def assess(self, question: Question, answer: str) -> Assessment:
         # Keep caller-owned inputs and the authoritative grade isolated across
@@ -131,14 +134,15 @@ class RealAssessor:
         else:
             correct = answer == question.answer_key
             outcome, score = ("correct", 1) if correct else ("incorrect", 0)
+        allowed_ids = ((_MISCONCEPTION,) if outcome == "incorrect"
+                       and _REVIEWED_CHOICES.get(question.question_id) == answer
+                       and question.concept_id == "admissibility_vs_consistency" else ())
         reviewed = Assessment(outcome=outcome, score=score, concept_id=question.concept_id,
-                              misconception_id=None, feedback=_FEEDBACK[outcome])
+                              misconception_id=_MISCONCEPTION if allowed_ids else None,
+                              feedback=_REVIEWED_FEEDBACK if allowed_ids else _FEEDBACK[outcome])
         if outcome == "unclear" or os.environ.get("MODEL_PROVIDER", "fake") != "bedrock":
             return reviewed
 
-        allowed_ids = ((_MISCONCEPTION,) if outcome == "incorrect"
-                       and question.question_id in _REVIEWED_QUESTIONS
-                       and question.concept_id == "admissibility_vs_consistency" else ())
         prompt = json.dumps({
             "question": question.public().model_dump(),
             "submitted_answer": answer,

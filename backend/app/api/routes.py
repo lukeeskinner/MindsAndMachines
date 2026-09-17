@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Body, Header, HTTPException
-from backend.app.agents.coordinator import Coordinator, IntegrationError
+from backend.app.agents.coordinator import Coordinator, IntegrationError, TurnTimeoutError
 from backend.app.auth.cognito import AuthError, cognito_enabled, verify_id_token
 from backend.app.storage.dynamo import DynamoStore
 from backend.app.storage.memory import MemoryStore, Session
@@ -58,6 +58,8 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
                 request, question, session.learner_state, session.history,
                 catalog.candidates, catalog.questions,
             )
+        except TurnTimeoutError:
+            raise HTTPException(504, "Learning turn timed out. Start a new session.") from None
         except IntegrationError:
             raise HTTPException(500, "Learning activity configuration error. Start a new session.") from None
         entry = HistoryEntry(question_id=question.question_id,

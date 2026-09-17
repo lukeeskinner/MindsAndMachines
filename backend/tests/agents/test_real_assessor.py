@@ -9,6 +9,7 @@ from backend.app.agents.provider import ProviderError, ProviderResult
 from backend.app.agents.real_assessor import MAX_FEEDBACK_LENGTH, MAX_RESPONSE_LENGTH, RealAssessor
 from backend.app.learner.bayesian import BayesianLearner
 from backend.app.teaching.catalog import Catalog
+from contracts.models import Choice, Question
 
 
 class RealAssessorTests(unittest.IsolatedAsyncioTestCase):
@@ -63,7 +64,7 @@ class RealAssessorTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual((result.outcome, result.score, result.concept_id),
                                  ("incorrect", 0, question.concept_id))
                 expected_diagnosis = ("admissible_means_consistent"
-                                      if question.question_id in {"relationship-q01", "relationship-q02"} else None)
+                                      if question.question_id in {"relationship-q01", "relationship-q02", "relationship-q03"} else None)
                 self.assertEqual(result.misconception_id, expected_diagnosis)
                 self.assertEqual(result.feedback, self.feedback)
                 self.complete.assert_awaited_once()
@@ -120,6 +121,42 @@ class RealAssessorTests(unittest.IsolatedAsyncioTestCase):
             result = await self.assessor.assess(self.question.model_copy(update=changes), "a")
             self.assertIsNone(result.misconception_id)
             self.assertEqual(json.loads(self.complete.call_args.args[0])["allowed_misconception_ids"], [])
+
+    async def test_reviewed_diagnosis_is_choice_specific_in_local_live_and_failure_modes(self):
+        reviewed = {("relationship-q01", "a"), ("relationship-q02", "a"), ("relationship-q03", "b")}
+        for mode in ["fake", "bedrock", "failed"]:
+            with patch.dict(os.environ, {"MODEL_PROVIDER": "fake" if mode == "fake" else "bedrock"}):
+                self.complete.side_effect = ProviderError("failed") if mode == "failed" else None
+                for question in self.catalog.questions.values():
+                    for choice in question.choices:
+                        with self.subTest(mode=mode, question=question.question_id, choice=choice.id):
+                            result = await self.assessor.assess(question, choice.id)
+                            self.assertEqual(result.misconception_id, "admissible_means_consistent"
+                                             if (question.question_id, choice.id) in reviewed else None)
+
+    async def test_generated_question_grades_without_catalog_diagnosis(self):
+        question = Question(question_id="generated-course-item-17", concept_id="generated-concept",
+                            prompt="Which structure uses first-in-first-out order?",
+                            choices=[Choice(id="queue", text="Queue"), Choice(id="stack", text="Stack"),
+                                     Choice(id="unsure", text="I'm not sure yet.")],
+                            answer_key="queue", rubric="A queue removes the earliest inserted item.")
+        learner = BayesianLearner()
+        initial = learner.initial_state([question.concept_id])
+        for mode in ["fake", "bedrock"]:
+            with patch.dict(os.environ, {"MODEL_PROVIDER": mode}):
+                for answer, outcome, score in [("queue", "correct", 1), ("stack", "incorrect", 0),
+                                                ("unsure", "unclear", None)]:
+                    with self.subTest(mode=mode, answer=answer):
+                        self.complete.reset_mock()
+                        result = await self.assessor.assess(question, answer)
+                        self.assertEqual((result.outcome, result.score, result.misconception_id),
+                                         (outcome, score, None))
+                        update = learner.update(initial.state, result, [])
+                        self.assertEqual(update.evidence_applied, score is not None)
+                        if mode == "bedrock" and score is not None:
+                            self.assertEqual(json.loads(self.complete.call_args.args[0])["allowed_misconception_ids"], [])
+                        else:
+                            self.complete.assert_not_called()
 
     async def test_invalid_misconception_type_falls_back(self):
         for diagnosis in [1, False, [], {}, ["admissible_means_consistent"]]:
@@ -205,7 +242,8 @@ class RealAssessorTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(first, await self.assessor.assess(self.question, answer))
                     self.assertNotIn("echo", first.feedback)
                     self.assertNotIn("prompt", first.feedback)
-                    self.assertIsNone(first.misconception_id)
+                    self.assertEqual(first.misconception_id,
+                                     "admissible_means_consistent" if answer == "a" else None)
         self.complete.assert_not_called()
 
     async def test_prompt_contains_only_public_context_and_trusted_outcome(self):
@@ -273,7 +311,7 @@ class RealAssessorDeadlineTests(unittest.IsolatedAsyncioTestCase):
             try:
                 result = await RealAssessor().assess(question, "a")
                 self.assertEqual((result.outcome, result.score), ("incorrect", 0))
-                self.assertIsNone(result.misconception_id)
+                self.assertEqual(result.misconception_id, "admissible_means_consistent")
                 self.assertNotIn("late", result.feedback)
                 self.assertFalse(finished.is_set())
                 converse.assert_called_once()

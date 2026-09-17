@@ -14,8 +14,10 @@ validation failure. `fallback` remains the existing boolean. Completion is
 
 The existing top-level `mode` and `provider` describe the **returned teaching**:
 `live/bedrock` only for accepted generation; otherwise `dummy/fake`. They do not
-describe the whole pipeline or record an attempted provider. The assessment
-remains FakeAssessor. The UI uses `tutor.teaching_source`, never prose or server
+describe the whole pipeline or record an attempted provider. Assessment uses
+RealAssessor with authoritative answer-key grading and optional Bedrock diagnosis;
+these teaching labels do not describe assessment provenance.
+The UI uses `tutor.teaching_source`, never prose or server
 configuration, to label Authored teaching, AI-generated teaching or Reviewed
 fallback. Raw model IDs are not added to learner-facing data.
 
