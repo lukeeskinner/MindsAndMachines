@@ -1,5 +1,7 @@
+import asyncio
 from dataclasses import dataclass
 from copy import deepcopy
+from backend.app.agents.provider import call_budget
 from contracts.interfaces import Assessor, Learner, Policy, Teaching
 from contracts.models import (
     Candidate, HistoryEntry, LearnerState, LearnerUpdate,
@@ -9,6 +11,17 @@ from contracts.models import (
 
 class IntegrationError(ValueError):
     """A seam violated the trusted policy/catalog contract."""
+
+
+# Sequential provider waits total at most 16s, leaving 2s for local work and
+# another 2s before the existing browser deadline. Smaller SDK settings win.
+ASSESSOR_BUDGET_SECONDS = 4.0
+TUTOR_BUDGET_SECONDS = 12.0
+TURN_BUDGET_SECONDS = 18.0
+
+
+class TurnTimeoutError(TimeoutError):
+    """The turn exceeded its deadline; no partial result may be saved."""
 
 
 @dataclass
@@ -22,8 +35,20 @@ class Coordinator:
                        state: LearnerState, history: list[HistoryEntry],
                        candidates: list[Candidate], questions: dict[str, Question]
                        ) -> tuple[LearnerUpdate, TurnResponse]:
+        try:
+            async with asyncio.timeout(TURN_BUDGET_SECONDS):
+                with call_budget(TURN_BUDGET_SECONDS):
+                    return await self._run_turn(request, question, state, history, candidates, questions)
+        except TimeoutError as exc:
+            raise TurnTimeoutError("Learning turn timed out") from exc
+
+    async def _run_turn(self, request: TurnRequest, question: Question,
+                        state: LearnerState, history: list[HistoryEntry],
+                        candidates: list[Candidate], questions: dict[str, Question]
+                        ) -> tuple[LearnerUpdate, TurnResponse]:
         trace: list[str] = []
-        assessment = await self.assessor.assess(question, request.answer)
+        with call_budget(ASSESSOR_BUDGET_SECONDS):
+            assessment = await self.assessor.assess(question, request.answer)
         trace.append("assess")
         update = self.learner.update(state, assessment, history)
         trace.append("update")
@@ -35,10 +60,11 @@ class Coordinator:
         if expected_next is not None and expected_next not in questions:
             raise IntegrationError("Policy selected an unknown next question")
         next_question = questions[expected_next].public() if expected_next is not None else None
-        teaching: TeachingResult = await self.teaching.teach(
-            decision.model_copy(deep=True) if decision else None,
-            assessment.model_copy(deep=True), deepcopy(update.concepts), request.presentation_preferences,
-        )
+        with call_budget(TUTOR_BUDGET_SECONDS):
+            teaching: TeachingResult = await self.teaching.teach(
+                decision.model_copy(deep=True) if decision else None,
+                assessment.model_copy(deep=True), deepcopy(update.concepts), request.presentation_preferences,
+            )
         trace.append("teach")
         # Teaching can format an intervention, never change its next question.
         if teaching.next_question_id != expected_next:

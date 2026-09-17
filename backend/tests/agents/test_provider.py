@@ -4,7 +4,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from backend.app.agents.provider import ProviderError, complete
+from backend.app.agents.provider import ProviderError, call_budget, complete
 
 
 class ProviderSeamTests(unittest.TestCase):
@@ -113,3 +113,46 @@ class BedrockProviderTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ProviderError):
                 await complete("prompt")
         self.factory.assert_not_called()
+
+    async def test_nested_budget_caps_socket_timeout_and_restores_parent(self):
+        with call_budget(0.5):
+            with call_budget(10):
+                await complete("nested")
+                self.assertLessEqual(self.factory.call_args.kwargs["config"].read_timeout, 0.5)
+            with call_budget(0.1):
+                await complete("shorter")
+                self.assertLessEqual(self.factory.call_args.kwargs["config"].read_timeout, 0.1)
+            await complete("parent")
+            self.assertGreater(self.factory.call_args.kwargs["config"].read_timeout, 0.1)
+        await complete("outside")
+        self.assertEqual(self.factory.call_args.kwargs["config"].read_timeout, 1)
+
+    async def test_exhausted_budget_starts_no_worker_and_resets_after_error(self):
+        with call_budget(0):
+            with self.assertRaises(ProviderError):
+                await complete("exhausted")
+        self.factory.assert_not_called()
+        await complete("new turn")
+        self.client.converse.assert_called_once()
+
+    async def test_budget_is_isolated_between_tasks(self):
+        scoped = asyncio.Event()
+        checked = asyncio.Event()
+
+        async def exhausted_task():
+            with call_budget(0):
+                scoped.set()
+                await checked.wait()
+                with self.assertRaises(ProviderError):
+                    await complete("exhausted")
+
+        async def ordinary_task():
+            await scoped.wait()
+            try:
+                await complete("ordinary")
+                self.assertEqual(self.factory.call_args.kwargs["config"].read_timeout, 1)
+            finally:
+                checked.set()
+
+        await asyncio.gather(exhausted_task(), ordinary_task())
+        self.client.converse.assert_called_once()

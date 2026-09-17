@@ -1,8 +1,8 @@
 # Real Assessor review notes
 
 `real_assessor.RealAssessor` implements the existing async `assess(question,
-answer) -> Assessment` protocol. It is not imported or selected by `main.py`;
-the running application still uses `FakeAssessor`. No shared records change.
+answer) -> Assessment` protocol. It is selected by `main.py`; `FakeAssessor` remains available for tests.
+No shared records or seam signatures change.
 
 The server compares a valid submitted choice ID exactly with `Question.answer_key`.
 Correct and incorrect choices yield scores 1 and 0. `unsure`, `unscorable`, missing
@@ -15,12 +15,27 @@ In Bedrock mode, one call may enrich only misconception and feedback. The prompt
 contains the public question, submitted choice, trusted outcome and allowed
 diagnosis IDs. Private rubrics and the answer-key field are withheld.
 
-The only existing authored diagnosis is `admissible_means_consistent`, currently
-embedded in FakeAssessor rather than catalog metadata. It is allowed only for
-incorrect responses on the two reviewed relationship questions and their concept.
-Unknown IDs become null. Correct/unclear responses and all fallbacks have no
-misconception. New questions need a reviewed vocabulary mapping before enrichment
-can attach a diagnosis; ordinary answer-key grading still works.
+The only reviewed diagnosis is `admissible_means_consistent`. The local/fallback
+mapping is deliberately choice-specific and requires the relationship concept:
+
+- q01/a explicitly asserts that every admissible heuristic is consistent.
+- q02/a classifies an admissible but inconsistent heuristic as both.
+- q03/b makes that same error. Its rubric explicitly links that distractor to
+  confusing the total-cost bound with the edge constraint (5 > 2+1).
+- q03/c and all q04 choices receive no diagnosis. q04 really is consistent
+  (6 <= 2+4, 4 <= 5+0, 6 <= 8+0); its incorrect answers do not establish this
+  misconception. No new taxonomy is introduced.
+
+These reviewed signals preserve the existing golden smoke's first-answer diagnosis
+and feedback. They replace RealAssessor's previous blanket null in local/fallback
+mode and FakeAssessor's blanket diagnosis on every wrong answer. A wrong q04
+answer can consequently select a different intervention; policy scoring is unchanged.
+Bedrock may attach only the diagnosis allowed for that question/choice or abstain.
+Unknown question IDs and other concepts get null diagnosis even when the model
+requests one; valid Question objects still grade from their own answer keys.
+Correct/unclear responses always have null diagnosis. Generated-course routes
+remain outside this workstream; an eventual listed unsure choice already works
+through the existing Question/Assessment contract.
 
 Output must be strict JSON with exactly `misconception_id` and `feedback`. Duplicate
 keys, non-JSON constants, invalid types, blank feedback, excessive lengths, control
@@ -36,17 +51,27 @@ unexpected exceptions return the same deterministic feedback and trusted grade.
 No retry or alternate provider is used. Caller-owned question data is copied before
 the await; no state is retained. Error payloads and prompts are not logged.
 
-Before separately authorized activation, SWE1 should review:
+Runtime deadline design:
 
-- The composition-root substitution and both local and mocked live turn flows.
-- The combined latency budget: assessor and Tutor would call the shared adapter
-  sequentially. Two default 12-second deadlines exceed the browser's 20-second
-  request budget; use a suitably smaller configured deadline or a reviewed total
-  turn budget at integration time.
-- Whether assessment provenance needs a later contract/UI addition. Assessment
-  has no provenance field; the existing public provider label describes teaching.
-- The intentional conservative null diagnosis in local/fallback mode, which can
-  alter the policy's diagnosis signal after activation even though grading is fixed.
+- Coordinator sets an 18-second total asynchronous deadline. Its provider budget
+  is task-local and restored on exit, including cancellation.
+- Assessment has a 4-second provider cap; Tutor has a 12-second cap. They run
+  sequentially, once each. Every provider call uses the minimum of its configured
+  timeout, stage budget and remaining total budget, including SDK socket settings.
+- `BEDROCK_TIMEOUT_SECONDS` still defaults to 12 and accepts (0, 15]. Smaller
+  settings remain effective; larger ones cannot extend a runtime stage.
+- The usual double timeout returns HTTP 200 with trusted grading/evidence and
+  authored teaching fallback within about 16 seconds. No diagnosis retry occurs.
+- If a replacement seam stalls beyond the total deadline, the route returns a
+  generic 504 without saving partial state/history. No automatic turn retry occurs.
+- Two seconds remain for local work and another two before the browser's existing
+  20-second timeout. No frontend change is needed. Synchronous storage/network
+  delays and event-loop blocking are not preempted by an asyncio deadline.
+- Timed-out SDK threads may finish later; their results cannot update the turn.
+  SDK socket deadlines and disabled retries remain in place.
+
+Assessment still has no provenance field; the existing public provider/teaching
+source labels describe teaching only. No UI or contract extension is added.
 
 Run the focused suite with `PYTHONPATH=. backend/.venv/bin/python -m unittest
 backend.tests.agents.test_real_assessor -v`. `make check` also discovers it. Provider

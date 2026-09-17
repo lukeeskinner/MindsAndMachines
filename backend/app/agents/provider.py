@@ -9,9 +9,24 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 
 logger = logging.getLogger("uvicorn.error.provider")
+_deadline: ContextVar[float | None] = ContextVar("provider_deadline", default=None)
+
+
+@contextmanager
+def call_budget(seconds: float):
+    """Cap provider waits in this task; nested budgets cannot extend a deadline."""
+    deadline = time.monotonic() + seconds
+    parent = _deadline.get()
+    token = _deadline.set(min(deadline, parent) if parent is not None else deadline)
+    try:
+        yield
+    finally:
+        _deadline.reset(token)
 
 
 def log_configuration(event: str) -> None:
@@ -61,6 +76,11 @@ async def _complete_bedrock(prompt: str, *, system: str | None, max_tokens: int)
         logger.warning("provider_failed reason=configuration_error")
         raise ProviderError("Bedrock requires region, model and a timeout in (0, 15] seconds") from exc
     try:
+        deadline = _deadline.get()
+        if deadline is not None:
+            timeout = min(timeout, deadline - time.monotonic())
+        if timeout <= 0:
+            raise TimeoutError("Provider budget exhausted")
         result = await asyncio.wait_for(asyncio.to_thread(
             _converse, prompt, system=system, max_tokens=max_tokens,
             region=region, model_id=model_id, timeout=timeout,
