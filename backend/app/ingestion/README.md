@@ -74,12 +74,13 @@ a detached structure that serializes to JSON arrays/objects.
 
 | Record | Fields |
 | --- | --- |
-| ProcessedCourse | `course_id`, `title`, `materials`, `concepts`, `questions`, `metadata` |
+| ProcessedCourse | `course_id`, `title`, `materials`, `concepts`, `questions`, `metadata`, `teaching` (default empty for legacy constructors) |
 | SourceMaterial | `material_id`, original basename `filename`, `sha256`, `format`, `chunks`, `status`, `issues` |
 | SourceChunk | `chunk_id`, `location_kind` (`page`/`slide`), `number`, original `text`, `normalized_text`, `status` |
 | SourceReference | `chunk_id`, exact normalized-text `quote` |
 | Concept | `concept_id`, `name`, extractive `summary`, `source_refs` |
 | Question | `question_id`, `concept_id`, `prompt`, `choices[{id,text}]`, server-only `answer_key`, `explanation`, `source_refs` |
+| TeachingArtifact | `teaching_id`, `concept_id`, `kind`, `paragraphs`, `source_refs`, `requires_review=true` |
 | ProcessingMetadata | `schema_version`, `mode` (`local`/`bedrock`), `provider_calls`, `warnings`, `requires_review=true` |
 
 Code alone assigns IDs, filenames, page/slide numbers, and extracted text. Material
@@ -111,6 +112,15 @@ existing backend environment and already configured AWS region/model/credentials
 MODEL_PROVIDER=bedrock python3 -m backend.app.ingestion \
   --mode bedrock --title 'Graph search' lecture5.pdf
 ```
+
+The same response now also includes exactly three teaching items per concept:
+`diagnostic_probe`, `worked_example` and `socratic_hint`. Each has `kind`,
+`paragraphs` and `source_refs`; trusted code assigns its stable ID and review flag.
+Subject prose must be cited excerpts or fixed process templates, and all kinds
+reject direct copying of any course answer/rubric. Local mode uses conservative
+process templates without a provider. See [runtime catalog](../teaching/RUNTIME_CATALOG.md)
+for the disclosure checks, their limitations, deterministic rendering and optional
+Bedrock Tutor personalization. Course processing still has only one provider call.
 
 There is exactly one provider call with a 6,000-token output budget. The existing
 provider deadline/retry policy applies. Generation returns 1–4 concepts and 2–4
@@ -150,11 +160,16 @@ execution available to the generation step.
    `answer_key`, with `rubric=explanation`. It retains source references separately
    in `AdaptedQuestion.source_refs`. `question.public()` exposes only the
    existing PublicQuestion-shaped fields and omits source answers/explanations.
-4. Build a course-scoped catalog and policy-eligible teaching/candidate content
-   separately. This artifact does not contain intervention candidates, prerequisites,
-   calibrated difficulty, or reviewed teaching examples. It cannot be dropped into
-   today's demo Catalog/Tutor unchanged. Initialize learner state from accepted
-   concept IDs only; processing/teaching must never raise mastery by itself.
+4. Call `teaching.runtime_catalog.build_runtime_catalog(course)` to build isolated
+   runtime questions, candidates and stored teaching content. It appends `unsure`
+   to runtime question copies and supplies explicit freshness/exhaustion helpers.
+   Tutor renders stored artifacts without a call in fake/local mode. In Bedrock
+   mode it may personalize them with one existing-adapter call per teaching turn,
+   falling back to the stored artifact on failure. Legacy artifacts without
+   teaching require explicit reprocessing. Content remains marked for human review;
+   no prerequisites, calibrated difficulty or learned treatment effects are added.
+   Initialize learner state from accepted concept IDs only; processing/teaching
+   must never raise mastery by itself. HTTP runtime activation is still separate.
 5. Integrator may add ingestion discovery to `make check`; this branch runs
    `python3 -m unittest discover -s backend/tests/ingestion -v` separately so the
    shared Makefile stays unchanged. Run the existing `make check` and `make smoke`

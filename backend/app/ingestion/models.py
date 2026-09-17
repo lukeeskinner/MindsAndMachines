@@ -72,6 +72,22 @@ class Question:
 
 
 @dataclass(frozen=True)
+class TeachingArtifact:
+    """Private prose checked for use before every question of this concept.
+
+    Only paragraphs are intended for learner display. References and review
+    status remain server-side; source checks do not constitute human review.
+    """
+
+    teaching_id: str
+    concept_id: str
+    kind: str
+    paragraphs: tuple[str, ...]
+    source_refs: tuple[SourceReference, ...]
+    requires_review: bool = True
+
+
+@dataclass(frozen=True)
 class ProcessingMetadata:
     schema_version: str
     mode: str
@@ -88,6 +104,7 @@ class ProcessedCourse:
     concepts: tuple[Concept, ...]
     questions: tuple[Question, ...]
     metadata: ProcessingMetadata
+    teaching: tuple[TeachingArtifact, ...] = ()
 
     def to_dict(self) -> dict:
         """SERVER-ONLY artifact: includes answer keys and source text."""
