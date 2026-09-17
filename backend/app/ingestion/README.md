@@ -4,8 +4,9 @@ This module processes PDF/PPTX into an immutable **server-only** course artifact
 The processing pipeline remains standalone. The
 [course/session foundation](../../../docs/COURSE_SESSION_FOUNDATION.md) now offers
 explicit private registration, public metadata and preview sessions for completed
-artifacts. There is no upload endpoint or uploaded-course learning activation;
-processing itself does not call storage, the API or the learning runtime.
+artifacts. A separate [upload router](../api/COURSE_UPLOADS.md) now implements the
+HTTP boundary and is mounted with the app-owned course registry. Uploaded-course learning is
+not activated; processing itself does not call storage, the API or learning runtime.
 
 From the repository root, using Python 3.12 or 3.13:
 
@@ -64,8 +65,10 @@ Limits: 1–8 files, 20 MB each, 1–100 pages/slides per file, 200,000 extracte
 characters per file, PPTX at most 2,000 archive members/40 MB expanded. Bedrock
 receives at most 24,000 normalized source characters; larger input is rejected
 with a request to split it, rather than silently dropping source content.
-Extraction is synchronous local work even though `process_course` is async for
-the provider seam; future API wiring should move processing off the request loop.
+Extraction is synchronous local work; `process_course` now runs that extraction
+in `asyncio.to_thread`, while leaving the bounded provider coroutine on the caller's
+event loop. The upload router bounds active processing to two requests. Cancellation
+waits for extraction to finish before the caller can remove temporary inputs.
 
 ## Internal schema (version 1)
 
@@ -147,10 +150,11 @@ execution available to the generation step.
 
 ## Exact later integration boundary
 
-1. A future upload handler supplies controlled local PDF/PPTX paths and a title to
+1. The dedicated upload router supplies controlled local PDF/PPTX paths and a title to
    `await process_course(paths, title=title, mode=mode) -> ProcessedCourse`; handle
    `IngestionError` without exposing raw provider exceptions. Upload transport,
-   authentication, file ownership, and persistence are not implemented here.
+   validation and temporary cleanup live in that API module; authentication and
+   durable persistence are not implemented here. See its handoff for composition.
 2. Register the artifact privately with `MemoryCourseRegistry.register(course)`.
    This keeps the full artifact in process memory; durable persistence is deferred.
    Resolve each reference via `materials[].chunks[].chunk_id` to its filename and
