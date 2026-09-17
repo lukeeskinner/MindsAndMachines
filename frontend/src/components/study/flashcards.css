@@ -1,0 +1,22 @@
+.study-mode { display: flex; gap: 6px; margin-bottom: 22px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.study-mode button[aria-pressed="true"] { background: var(--teal-light); color: var(--teal-dark); }
+.flashcard-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 18px; color: var(--muted-foreground); font-size: .8125rem; }
+.flashcard-toolbar label { display: grid; gap: 6px; min-width: 0; font-weight: 600; }
+.flashcard-toolbar select { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 9px 30px 9px 12px; color: var(--foreground); background: var(--background); font: inherit; }
+.flashcard-navigation { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.flashcard-navigation button { width: 40px; min-height: 44px; padding: 0; }
+.flashcard-navigation span { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.flashcard-progress { height: 4px; background: var(--teal-light); border-radius: 4px; margin-bottom: 18px; overflow: hidden; }
+.flashcard-progress span { display: block; height: 100%; background: var(--teal-dark); }
+.flashcard-surface { background: var(--card, white); border: 1px solid var(--border); border-radius: 18px; padding: clamp(22px, 4vw, 40px); min-height: 370px; overflow-wrap: anywhere; }
+.flashcard-surface .surface-meta { margin-bottom: 38px; gap: 16px; }
+.flashcard-surface .surface-meta > span:first-child { display: flex; align-items: center; gap: 8px; }
+.flashcard-surface h2 { font-size: clamp(1.3rem, 2vw, 1.8rem); line-height: 1.4; letter-spacing: -.04em; margin: 12px 0 20px; }
+.flashcard-prompt, .flashcard-note, .flashcard-complete > p { color: var(--muted-foreground); line-height: 1.7; }
+.flashcard-answer { border-top: 1px solid var(--border); padding-top: 22px; line-height: 1.8; white-space: pre-wrap; }
+.flashcard-answer small { display: block; margin-top: 16px; color: var(--muted-foreground); font-size: .75rem; }
+.flashcard-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+.flashcard-note { margin-top: 18px; font-size: .75rem; }
+.flashcard-complete > svg { color: var(--teal-dark); margin-bottom: 20px; }
+.flashcard-surface h2:focus { outline: none; }
+@media (max-width: 560px) { .flashcard-surface { min-height: 320px; } .flashcard-surface .surface-meta { margin-bottom: 24px; } }

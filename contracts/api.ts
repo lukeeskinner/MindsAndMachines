@@ -35,6 +35,15 @@ export interface SessionResponse {
   course_id: string | null;
   question: PublicQuestion;
   concepts: ConceptEstimate[];
+  question_count: number;
+  flashcards: Flashcard[];
+}
+export interface Flashcard {
+  card_id: string;
+  concept_id: string;
+  front: string;
+  back: string;
+  source: string;
 }
 export interface TurnRequest {
   session_id: string;

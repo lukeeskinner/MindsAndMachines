@@ -16,6 +16,7 @@ check:
 	$(PYTHON) -m unittest discover -s tests/integration -v
 	$(PYTHON) -m unittest discover -s backend/tests/agents -v
 	$(PYTHON) -m unittest discover -s backend/tests/teaching -v
+	$(PYTHON) -m unittest discover -s backend/tests/ingestion -v
 	$(PYTHON) -m unittest discover -s backend/tests/auth -v
 	$(PYTHON) -m unittest discover -s backend/tests/learner -v
 	$(PYTHON) -m unittest discover -s backend/tests/policy -v

@@ -73,6 +73,18 @@ SWE1 wires dependencies in one place. The fake implementations occupy the same s
 
 ## Tiny HTTP surface
 
+The learning-mode extension adds `question_count: number` and
+`flashcards: [{card_id, concept_id, front, back, source}]` to `SessionResponse`.
+The count is the actual course question-bank size. Flashcards deliberately expose
+study notes: authored Intro AI notes for the demo, or exact concept summaries and
+source filenames for uploaded courses. This is an explicit display projection,
+not serialization of question keys, rubrics, raw source records or provider data.
+Card navigation and self-ratings remain frontend session state and never call
+`/turns`, update learner estimates, or add evidence. Reset/course changes clear
+that review state. The assessment and turn contracts remain unchanged.
+New uploads contain 5–10 questions, while previously stored courses retain their
+existing bank size until reprocessed. The demo contains eight questions.
+
 | Endpoint | Request | Response |
 | --- | --- | --- |
 | `POST /api/v1/sessions` | Optional `SessionRequest: {course_id?: string|null}`; empty/absent body supported | `session_id`, `course_id: string|null`, `question: PublicQuestion`, `concepts` |

@@ -73,17 +73,20 @@ class ContentExpansionTests(unittest.TestCase):
         return session, results
 
     def test_all_answer_paths_use_fresh_questions_and_complete(self):
-        for outcomes in itertools.product(("correct", "incorrect", "unclear"), repeat=4):
+        # Cover every four-answer prefix, then mixed outcomes across the larger bank.
+        for prefix in itertools.product(("correct", "incorrect", "unclear"), repeat=4):
+            outcomes = prefix + ("correct", "incorrect", "unclear", "correct")
             with self.subTest(outcomes=outcomes):
                 self.run_sequence(outcomes)
 
     def test_expanded_golden_sequence_preferences_and_reset(self):
-        outcomes = ("incorrect", "correct", "correct", "correct")
+        outcomes = ("incorrect",) + ("correct",) * 7
         session, original = self.run_sequence(outcomes)
         self.assertEqual([r["decision"]["kind"] for r in original if r["decision"]],
-                         ["socratic_hint", "diagnostic_probe", "worked_example"])
+                         ["socratic_hint", "diagnostic_probe"] + ["worked_example"] * 5)
         self.assertEqual([r["next_question"]["question_id"] for r in original if r["next_question"]],
-                         ["relationship-q04", "relationship-q03", "relationship-q02"])
+                         ["relationship-q04", "relationship-q03", "relationship-q02",
+                          "relationship-q05", "relationship-q06", "relationship-q07", "relationship-q08"])
         reset, formatted = self.run_sequence(outcomes, {
             "plain_language": True, "concise": True, "step_by_step": True})
         self.assertNotEqual(reset["session_id"], session["session_id"])

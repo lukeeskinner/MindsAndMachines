@@ -117,6 +117,25 @@ class UploadedCourseRuntimeTests(unittest.TestCase):
 
     def test_grad_algorithms_upload_session_and_reset_never_select_demo_content(self):
         public = self.upload("grad-algorithms.pptx")
+        other = self.upload("course.pptx", title="Another subject")
+        for metadata in (public, other):
+            session = self.start(metadata)
+            course = self.registry.get(metadata["course_id"])
+            self.assertEqual(session["question_count"], metadata["question_count"])
+            self.assertTrue(5 <= session["question_count"] <= 10)
+            self.assertEqual({card["concept_id"] for card in session["flashcards"]},
+                             {concept.concept_id for concept in course.concepts})
+            for card in session["flashcards"]:
+                concept = next(c for c in course.concepts if c.concept_id == card["concept_id"])
+                self.assertEqual(card["back"], concept.summary)
+                self.assertTrue(any(card["back"] in ref.quote for ref in concept.source_refs))
+                self.assertEqual(set(card), {"card_id", "concept_id", "front", "back", "source"})
+            self.assertTrue(all(c["evidence_count"] == 0 for c in session["concepts"]))
+        self.assertTrue(set(c["card_id"] for c in self.start(public)["flashcards"]).isdisjoint(
+            c["card_id"] for c in self.start(other)["flashcards"]))
+
+    def test_grad_algorithms_session_and_reset_preserve_course(self):
+        public = self.upload("grad-algorithms.pptx")
         course_id = public["course_id"]
         self.assertTrue(course_id.startswith("course_"))
         runtime = build_runtime_catalog(self.registry.get(course_id))

@@ -142,11 +142,21 @@ class SessionRequest(Record):
     course_id: str | None = Field(default=None, min_length=1)
 
 
+class Flashcard(Record):
+    card_id: str
+    concept_id: str
+    front: str
+    back: str
+    source: str
+
+
 class SessionResponse(Record):
     session_id: str
     course_id: str | None = None
     question: PublicQuestion
     concepts: list[ConceptEstimate]
+    question_count: int = Field(default=0, ge=0)
+    flashcards: list[Flashcard] = Field(default_factory=list)
 
 
 class TurnResponse(Record):

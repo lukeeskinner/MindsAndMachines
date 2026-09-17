@@ -85,6 +85,10 @@ class TutorRuntimeTests(unittest.TestCase):
         for question_id, answer, content_id, next_id in [
             ("relationship-q04", "a", "heuristic-distinction-probe", "relationship-q03"),
             ("relationship-q03", "a", "heuristic-distinction", "relationship-q02"),
+            ("relationship-q02", "b", "heuristic-distinction", "relationship-q05"),
+            ("relationship-q05", "c", "heuristic-distinction", "relationship-q06"),
+            ("relationship-q06", "b", "heuristic-distinction", "relationship-q07"),
+            ("relationship-q07", "c", "heuristic-distinction", "relationship-q08"),
         ]:
             if not fallback:
                 self.sdk.converse.return_value = self.envelope(json.dumps({
@@ -94,15 +98,15 @@ class TutorRuntimeTests(unittest.TestCase):
             self.assertEqual(response.json()["next_question"]["question_id"], next_id)
             self.assertEqual(response.json()["tutor"]["teaching_source"],
                              "authored_fallback" if fallback else "bedrock")
-        final = self.answer("relationship-q02", "b")
+        final = self.answer("relationship-q08", "b")
         self.assertEqual(final.status_code, 200)
         self.assertIsNone(final.json()["next_question"])
         self.assertEqual(final.json()["tutor"]["teaching_source"], "authored")
         self.assertEqual(final.json()["provider"], "fake")
-        self.assertEqual(self.sdk.converse.call_count, 7)  # Four assessments; three Tutor generations.
+        self.assertEqual(self.sdk.converse.call_count, 15)  # Eight assessments; seven Tutor generations.
         stored = self.store.load_session(self.session["session_id"])
-        self.assertEqual(len(stored.history), 4)
-        self.assertEqual(stored.learner_state.skills["admissibility_vs_consistency"].evidence_count, 4)
+        self.assertEqual(len(stored.history), 8)
+        self.assertEqual(stored.learner_state.skills["admissibility_vs_consistency"].evidence_count, 8)
         reset = self.client.post("/api/v1/sessions", json={}).json()
         self.assertNotEqual(reset["session_id"], self.session["session_id"])
         self.assertEqual(reset["concepts"], self.session["concepts"])

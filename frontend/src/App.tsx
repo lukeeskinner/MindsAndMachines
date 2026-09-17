@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type {
   ConceptEstimate,
+  Flashcard,
   LearnerPresentationPreferences,
   PublicQuestion,
   TurnRequest,
@@ -41,6 +42,7 @@ import { post, requestErrorMessage } from "./lib/api";
 import { createSession, CourseError } from "./lib/courses";
 import { CourseBoundary, useCourseLabels } from "./components/course/CourseContext";
 import { AnswerImpact } from "./components/study/AnswerImpact";
+import { Flashcards } from "./components/study/Flashcards";
 import {
   TeachingSource,
   teachingLabel,
@@ -184,6 +186,9 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
   const [question, setQuestion] = useState<PublicQuestion | null>(null);
   const [concepts, setConcepts] = useState<ConceptEstimate[]>([]);
   const [entries, setEntries] = useState<StudyEntry[]>([]);
+  const [questionCount, setQuestionCount] = useState<number | null>(null);
+  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
+  const [studyMode, setStudyMode] = useState<"practice" | "flashcards">("practice");
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -217,6 +222,9 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
       setQuestion(result.question);
       setConcepts(result.concepts);
       setEntries([]);
+      setQuestionCount(result.question_count || activeCourse?.question_count || null);
+      setFlashcards(result.flashcards ?? []);
+      setStudyMode("practice");
       setAnswer("");
       setReviewing(false);
       setView("study");
@@ -246,9 +254,9 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
     return () => media.removeEventListener("change", update);
   }, []);
   useEffect(() => {
-    if (view === "study" && entries.length)
+    if (view === "study" && studyMode === "practice" && entries.length)
       focusHeading.current?.focus({ preventScroll: true });
-  }, [reviewing, entries.length, view]);
+  }, [reviewing, entries.length, view, studyMode]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -471,14 +479,15 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                     THIS SESSION{" "}
                     <strong>
                       {entries.length}
+                      {questionCount !== null && <span> / {questionCount}</span>}
                     </strong>
                   </span>
                   <div
                     className="progress-segments"
                     aria-label={`${entries.length} questions answered`}
                   >
-                    <span className={entries.length > 0 ? "filled" : ""} />
-                    <span className={entries.length > 1 ? "filled" : ""} />
+                    {Array.from({ length: questionCount ?? Math.max(1, entries.length) }, (_, index) =>
+                      <span key={index} className={entries.length > index ? "filled" : ""} />)}
                   </div>
                   <span className="progress-note">questions answered</span>
                 </div>
@@ -559,28 +568,25 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                     Back to study desk
                   </Button>
                 </TabsContent>
-                <TabsContent value="study" className="view-panel">
+                <TabsContent value="study" className="view-panel" forceMount hidden={view !== "study"}>
+                  <div className="study-mode" role="group" aria-label="Study mode">
+                    <Button variant="ghost" aria-pressed={studyMode === "practice"} onClick={() => setStudyMode("practice")}><BookOpen size={16} />Practice quiz</Button>
+                    <Button variant="ghost" aria-pressed={studyMode === "flashcards"} onClick={() => setStudyMode("flashcards")}><Layers3 size={16} />Flashcards</Button>
+                  </div>
+                  <div hidden={studyMode !== "flashcards"}><Flashcards key={sessionId} cards={flashcards} names={names} /></div>
+                  <div hidden={studyMode !== "practice"}>
+                  {view === "study" && <>
                   <div className="lesson-path" aria-label="Session sequence">
                     <span
-                      className={
-                        entries.length === 0 ||
-                        (reviewing && entries.length === 1)
-                          ? "current"
-                          : "done"
-                      }
+                      className={reviewing ? "done" : "current"}
                     >
-                      <b>{entries.length ? <Check size={13} /> : "01"}</b>{activeCourse ? "Course question" : "The relationship"}
+                      <b><BookOpen size={13} /></b>{complete ? "Practice complete" : `Question ${Math.max(1, entries.length + (reviewing ? 0 : 1))}${questionCount ? ` of ${questionCount}` : ""}`}
                     </span>
                     <span className="path-rule" />
                     <span
-                      className={
-                        entries.length > 0 && (!reviewing || entries.length > 1)
-                          ? "current"
-                          : ""
-                      }
+                      className={reviewing ? "current" : ""}
                     >
-                      <b>{entries.length > 1 ? <Check size={13} /> : "02"}</b>A
-                      fresh example
+                      <b><Check size={13} /></b>Review & reflect
                     </span>
                   </div>
                   <section className="study-surface" aria-busy={busy}>
@@ -815,6 +821,8 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                       </p>
                     </div>
                     <Layers3 size={28} strokeWidth={1.3} />
+                  </div>
+                  </>}
                   </div>
                 </TabsContent>
                 <TabsContent value="map" className="view-panel">

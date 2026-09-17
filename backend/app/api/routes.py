@@ -6,6 +6,7 @@ from backend.app.storage.dynamo import DynamoStore
 from backend.app.storage.memory import MemoryStore, Session
 from backend.app.storage.courses import MemoryCourseRegistry
 from backend.app.teaching.catalog import Catalog
+from backend.app.teaching.flashcards import demo_flashcards, course_flashcards
 from backend.app.ingestion.models import IngestionError
 from backend.app.teaching.runtime_catalog import RuntimeAvailability, RuntimeCatalog, build_runtime_catalog
 from contracts.models import HistoryEntry, SessionRequest, SessionResponse, TurnRequest, TurnResponse
@@ -36,16 +37,21 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
         if request.course_id is None:
             concept_ids = catalog.concept_ids
             question = catalog.question(catalog.first_question_id)
+            question_count = len(catalog.questions)
+            cards = demo_flashcards()
         else:
             course_catalog = course_runtime(request.course_id)
             concept_ids = course_catalog.concept_ids
             question = course_catalog.question(course_catalog.first_question_id)
+            question_count = len(course_catalog.questions)
+            cards = course_flashcards(course_catalog.course)
         initial = coordinator.learner.initial_state(concept_ids)
         session_id = store.new_session(question.question_id, initial.state, user_id,
                                        course_id=request.course_id)
         return SessionResponse(session_id=session_id,
                                course_id=request.course_id, question=question.public(),
-                               concepts=initial.concepts)
+                               concepts=initial.concepts, question_count=question_count,
+                               flashcards=cards)
 
     @router.post("/turns", response_model=TurnResponse)
     async def turn(request: TurnRequest) -> TurnResponse:

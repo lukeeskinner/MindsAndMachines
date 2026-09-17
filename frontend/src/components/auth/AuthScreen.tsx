@@ -2,8 +2,6 @@ import { useMemo, useRef, useState, type FormEvent } from "react";
 import { MotionConfig } from "motion/react";
 import {
   ArrowRight,
-  BadgeCheck,
-  CheckCircle2,
   KeyRound,
   LockKeyhole,
   Mail,
@@ -14,6 +12,7 @@ import { BrandWordmark } from "../brand/Brand";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Scene } from "../ui/primitives";
+import { LoginArtwork } from "./LoginArtwork";
 
 type AuthErrors = Partial<Record<"email" | "password", string>>;
 
@@ -62,13 +61,6 @@ export function AuthScreen({
           <Scene className="auth-card">
             <div className="auth-header">
               <BrandWordmark className="auth-brand" />
-              <img
-                className="auth-cognito-logo"
-                src={cognitoLogo}
-                alt="Amazon Cognito"
-                width={1280}
-                height={720}
-              />
             </div>
             <h1 id="login-title" className="auth-heading">
               Sign in to your study workspace.
@@ -78,6 +70,11 @@ export function AuthScreen({
                 <p className="auth-intro">
                   Sign in with your real account through Amazon Cognito.
                 </p>
+                <div className="auth-provider">
+                  <img className="auth-cognito-logo" src={cognitoLogo}
+                    alt="Amazon Cognito" width={1280} height={720} />
+                  <span>Account sign-in<small>Continue to your learning workspace.</small></span>
+                </div>
                 <Button
                   variant="secondary"
                   className="auth-hosted"
@@ -177,27 +174,15 @@ export function AuthScreen({
         </section>
         <aside className="auth-context" aria-label="Study workspace preview">
           <div className="auth-context-header">
-            <span>COURSE GATE</span>
-            <BadgeCheck size={18} />
+            <span>A SPACE TO MAKE IT CLICK</span>
+            <span className="auth-art-index" aria-hidden="true">M / M</span>
           </div>
-          <div className="auth-context-course">
-            <span>Introduction to AI</span>
-            <strong>Ready after sign-in</strong>
+          <LoginArtwork />
+          <div className="auth-art-caption">
+            <span className="auth-art-eyebrow">CURIOSITY, IN MOTION</span>
+            <h2>Small steps.<br />Clearer connections.</h2>
+            <p>A question, an explanation, a new perspective.<br />Make a little room for learning.</p>
           </div>
-          <ol className="auth-checks">
-            <li>
-              <CheckCircle2 size={17} />
-              <span>Preview your course setup</span>
-            </li>
-            <li>
-              <CheckCircle2 size={17} />
-              <span>Keep your draft in this tab</span>
-            </li>
-            <li>
-              <CheckCircle2 size={17} />
-              <span>Explore guided practice questions</span>
-            </li>
-          </ol>
         </aside>
       </main>
     </MotionConfig>

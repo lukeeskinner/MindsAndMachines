@@ -175,11 +175,12 @@ export function Materials({
           </ul>
         </div>
       )}
-      <p className="mt-3 text-xs leading-5 text-muted-foreground">
-        {sent
-          ? "An upload was requested for these files. See the course status for the confirmed result."
-          : "Files stay in this tab. They haven’t been uploaded or processed, and are not supplied to the tutor."}
-      </p>
+      {sent && (
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+          An upload was requested for these files. See the course status for the
+          confirmed result.
+        </p>
+      )}
       <span className="sr-only" role="status">
         {announcement}
       </span>

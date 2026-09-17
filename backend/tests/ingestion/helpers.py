@@ -19,7 +19,12 @@ def plan_for(materials):
              "wrong_option_1": "This material concerns underwater marmalade factories.",
              "wrong_option_2": "This material explains lunar railway schedules.",
              "wrong_option_3": "This material is about rainbow crop rotation."},
+            "additional_questions": [],
         })
-        if len(concepts) == 4:
+        if len(concepts) == 5:
             break
+    for i in range(max(0, 5 - len(concepts) * 2)):
+        concept = concepts[i % len(concepts)]
+        concept["additional_questions"].append({**concept["first_question"],
+            "prompt": f"Which source statement supports recall task {i + 1}?"})
     return {"concepts": concepts}

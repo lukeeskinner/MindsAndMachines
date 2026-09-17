@@ -51,6 +51,111 @@
       "answer_key": "a",
       "rubric": "True remaining costs at S,A,G are 7,5,0, so estimates 6,4,0 are admissible. All edges satisfy consistency: 6 <= 2+4, 4 <= 5+0, and 6 <= 8+0. Underestimating remaining costs can coexist with consistency; the edge check need not fail."
     }
+    ,
+    {
+      "question_id": "relationship-q05",
+      "concept_id": "admissibility_vs_consistency",
+      "prompt": "A directed graph has only these edges: S → A (cost 3), A → G (cost 2), and S → G (cost 8). G is the goal. Let h(S)=6, h(A)=2, h(G)=0. Which description fits this heuristic?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Admissible, but not consistent."
+        },
+        {
+          "id": "b",
+          "text": "Both admissible and consistent."
+        },
+        {
+          "id": "c",
+          "text": "Neither admissible nor consistent."
+        },
+        {
+          "id": "unsure",
+          "text": "I'm not sure yet."
+        }
+      ],
+      "answer_key": "c",
+      "rubric": "The shortest remaining cost at S is 5, but h(S)=6 overestimates it. Consistency also fails on S→A because 6 > 3+2."
+    },
+    {
+      "question_id": "relationship-q06",
+      "concept_id": "admissibility_vs_consistency",
+      "prompt": "A directed graph has only these edges: S → A (cost 4), A → G (cost 3), and S → G (cost 9). G is the goal. Let h(S)=0, h(A)=0, h(G)=0. Which description fits this heuristic?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Neither admissible nor consistent."
+        },
+        {
+          "id": "b",
+          "text": "Both admissible and consistent."
+        },
+        {
+          "id": "c",
+          "text": "Admissible, but not consistent."
+        },
+        {
+          "id": "unsure",
+          "text": "I'm not sure yet."
+        }
+      ],
+      "answer_key": "b",
+      "rubric": "Zero estimates never exceed the nonnegative remaining costs. Every consistency inequality is 0 <= a nonnegative edge cost + 0, so both properties hold."
+    },
+    {
+      "question_id": "relationship-q07",
+      "concept_id": "admissibility_vs_consistency",
+      "prompt": "An edge S → A costs 2, and h(A)=1. What is the largest value of h(S) that satisfies consistency on this edge?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "h(S) can be at most 1."
+        },
+        {
+          "id": "b",
+          "text": "h(S) can be at most 2."
+        },
+        {
+          "id": "c",
+          "text": "h(S) can be at most 3."
+        },
+        {
+          "id": "d",
+          "text": "Any value, provided h(S) is admissible."
+        },
+        {
+          "id": "unsure",
+          "text": "I'm not sure yet."
+        }
+      ],
+      "answer_key": "c",
+      "rubric": "The edge constraint is h(S) <= 2 + h(A) = 3. This checks one edge only; admissibility does not replace this local constraint."
+    },
+    {
+      "question_id": "relationship-q08",
+      "concept_id": "admissibility_vs_consistency",
+      "prompt": "A heuristic is consistent on every edge and equals zero at the goal. Why does following a cheapest path establish admissibility at its starting node?",
+      "choices": [
+        {
+          "id": "a",
+          "text": "Consistency requires every heuristic estimate to be zero."
+        },
+        {
+          "id": "b",
+          "text": "Combining the edge inequalities bounds the starting estimate by that path's total cost."
+        },
+        {
+          "id": "c",
+          "text": "Admissibility depends only on the first edge of the path."
+        },
+        {
+          "id": "unsure",
+          "text": "I'm not sure yet."
+        }
+      ],
+      "answer_key": "b",
+      "rubric": "Along a finite cheapest path, repeatedly substitute h(n) <= c(n,n′) + h(n′). With the goal estimate zero, the initial estimate is bounded by the total path cost, proving admissibility."
+    }
   ],
   "candidates": [
     {
@@ -73,7 +178,11 @@
       "kind": "socratic_hint",
       "content_id": "heuristic-distinction-hint",
       "next_question_id": "relationship-q04"
-    }
+    },
+    {"candidate_id": "relationship-transfer-05", "concept_id": "admissibility_vs_consistency", "kind": "worked_example", "content_id": "heuristic-distinction", "next_question_id": "relationship-q05"},
+    {"candidate_id": "relationship-transfer-06", "concept_id": "admissibility_vs_consistency", "kind": "worked_example", "content_id": "heuristic-distinction", "next_question_id": "relationship-q06"},
+    {"candidate_id": "relationship-transfer-07", "concept_id": "admissibility_vs_consistency", "kind": "worked_example", "content_id": "heuristic-distinction", "next_question_id": "relationship-q07"},
+    {"candidate_id": "relationship-transfer-08", "concept_id": "admissibility_vs_consistency", "kind": "worked_example", "content_id": "heuristic-distinction", "next_question_id": "relationship-q08"}
   ],
   "teaching": {
     "heuristic-distinction-probe": {

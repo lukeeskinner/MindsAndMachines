@@ -82,7 +82,8 @@ class CatalogTests(unittest.TestCase):
             (True, False): "Admissible, but not consistent.",
             (False, False): "Neither admissible nor consistent.",
         }
-        for question_id in ("relationship-q02", "relationship-q03", "relationship-q04"):
+        for question_id in ("relationship-q02", "relationship-q03", "relationship-q04",
+                            "relationship-q05", "relationship-q06"):
             with self.subTest(question=question_id):
                 question = self.catalog.question(question_id)
                 edges = {(a, b): int(cost) for a, b, cost in re.findall(

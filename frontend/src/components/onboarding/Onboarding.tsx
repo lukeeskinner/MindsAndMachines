@@ -10,7 +10,6 @@ import {
   Clock3,
   FileText,
   LockKeyhole,
-  Waypoints,
 } from "lucide-react";
 import { BrandWordmark } from "../brand/Brand";
 import { Button } from "../ui/button";
@@ -313,21 +312,6 @@ export function Onboarding({
                   )}
                 </section>
                 <CourseUpload files={draft.files} title={draft.courseName} onActivated={onContinue} />
-                <div className="demo-handoff">
-                  <Waypoints size={21} />
-                  <div>
-                    <h2 className="font-heading text-sm font-semibold">
-                      Try the learning experience
-                    </h2>
-                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                      {selectedCourse
-                        ? `Selected course: ${selectedCourse.title}. Your next session uses this course’s questions.`
-                        : draft.files.length || readyCourse
-                          ? "Start your uploaded course to study questions from these materials. Your course must finish processing before study begins."
-                        : "The practice demo uses our Intro AI questions. Activate a processed course to study its questions. Goals remain a local draft."}
-                    </p>
-                  </div>
-                </div>
                 <div className="setup-actions">
                   <Button variant="ghost" onClick={() => goTo(2)}>
                     <ArrowLeft size={16} />
@@ -338,17 +322,11 @@ export function Onboarding({
                     <ArrowRight size={17} />
                   </Button>
                 </div>
-                <p className="mt-4 text-center text-xs text-muted-foreground">
-                  Your draft stays in this tab until you refresh or close it.
-                </p>
               </Scene>
             ) : (
               <Scene key="form">
                 <p className="setup-eyebrow">YOUR COURSE. YOUR PACE.</p>
                 <h1 className="setup-heading">Let’s set up your course.</h1>
-                <p className="setup-intro">
-                  Bring your materials, choose a goal, and make room to learn.
-                </p>
                 <form ref={form} onSubmit={review} noValidate>
                   <section
                     id="course-section"
@@ -374,12 +352,9 @@ export function Onboarding({
                       autoComplete="off"
                       required
                       aria-invalid={!!errors.courseName}
-                      aria-describedby={`course-help${errors.courseName ? " course-error" : ""}`}
+                      aria-describedby={errors.courseName ? "course-error" : undefined}
                       className="bg-surface text-base"
                     />
-                    <p id="course-help" className="setup-field-hint">
-                      Use the name you’ll recognize when you come back.
-                    </p>
                     {errors.courseName && (
                       <p
                         id="course-error"
@@ -526,20 +501,12 @@ export function Onboarding({
                       <ArrowRight size={17} />
                     </Button>
                   </div>
-                  <p className="draft-disclosure">
-                    <LockKeyhole size={13} />
-                    <span>
-                      Setup preview. Your draft stays in this tab; refreshing
-                      clears it.
-                    </span>
-                  </p>
                 </form>
               </Scene>
             )}
           </div>
           <footer className="setup-footer">
             <span>MINDS & MACHINES</span>
-            <span>Learning starts with a little curiosity.</span>
           </footer>
         </main>
       </div>

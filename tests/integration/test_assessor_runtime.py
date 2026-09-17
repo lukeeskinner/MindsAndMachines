@@ -146,7 +146,9 @@ class AssessorRuntimeTests(unittest.TestCase):
                 session = self.session()
                 responses = []
                 for question_id, answer in [("relationship-q01", "a"), ("relationship-q04", "a"),
-                                             ("relationship-q03", "a"), ("relationship-q02", "b")]:
+                                             ("relationship-q03", "a"), ("relationship-q02", "b"),
+                                             ("relationship-q05", "c"), ("relationship-q06", "b"),
+                                             ("relationship-q07", "c"), ("relationship-q08", "b")]:
                     self.assertEqual(session["question"]["question_id"], question_id)
                     response = self.answer(session, answer)
                     self.assertEqual(response.status_code, 200, response.text)

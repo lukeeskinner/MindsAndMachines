@@ -112,7 +112,7 @@ class TeachingIngestionTests(unittest.IsolatedAsyncioTestCase):
             material = replace(self.materials[0], chunks=(chunk,))
             with self.subTest(heading=heading), patch("backend.app.ingestion.pipeline.extract_material", return_value=material):
                 course = await process_course([FIXTURE], mode="local")
-                self.assertEqual(len(course.questions), 2)
+                self.assertEqual(len(course.questions), 5)
                 self.assertEqual(len(course.teaching), 3)
                 for question in course.questions:
                     answer = next(choice.text for choice in question.choices if choice.id == question.answer_key)

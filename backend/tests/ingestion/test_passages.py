@@ -6,7 +6,7 @@ from pathlib import Path
 import unittest
 
 from backend.app.ingestion import IngestionError, extract_material
-from backend.app.ingestion.passages import build_passages, resolve_plan
+from backend.app.ingestion.passages import Passage, build_passages, resolve_plan
 from backend.app.ingestion.pipeline import validate_proposal
 from backend.tests.ingestion.helpers import plan_for
 
@@ -23,6 +23,7 @@ class PassagePlanTests(unittest.TestCase):
         return validate_proposal(json.dumps(resolve_plan(plan, self.passages)), self.materials, "test_course")
 
     def test_source_ids_resolve_exact_evidence_and_preserve_ai_question_text(self):
+        self.assertTrue(5 <= len(self.validate(self.plan)[1]) <= 10)
         concepts, questions = self.validate(self.plan)
         self.assertTrue(concepts)
         for concept in concepts:
@@ -46,7 +47,7 @@ class PassagePlanTests(unittest.TestCase):
             self.validate(plan)
 
     def test_both_question_slots_are_required(self):
-        for field in ("first_question", "second_question"):
+        for field in ("first_question", "second_question", "additional_questions"):
             plan = copy.deepcopy(self.plan)
             del plan["concepts"][0][field]
             with self.subTest(field=field), self.assertRaises(IngestionError):
@@ -103,7 +104,23 @@ class PassagePlanTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaisesRegex(IngestionError, reason):
                 self.validate(plan)
 
-    def test_passage_windows_preserve_source_and_stable_ids(self):
+    def test_bank_accepts_five_and_ten_questions_and_rejects_outside_bounds(self):
+        passages = tuple(Passage(f"p{i}", f"chunk{i}", "A useful source statement.", f"Topic {i}",
+                                 ((f"a{i}", "A useful source statement."),)) for i in range(5))
+        def concept(i, extra):
+            question = {"prompt": "What does this source explain?", "answer_id": f"a{i}",
+                        "wrong_option_1": "A different explanation.", "wrong_option_2": "Another explanation.",
+                        "wrong_option_3": "An unrelated explanation."}
+            return {"passage_id": f"p{i}", "first_question": question, "second_question": question,
+                    "additional_questions": [question.copy() for _ in range(extra)]}
+        for count, extra, expected in ((1, 3, 5), (5, 0, 10)):
+            result = resolve_plan({"concepts": [concept(i, extra) for i in range(count)]}, passages)
+            self.assertEqual(sum(len(c["questions"]) for c in result["concepts"]), expected)
+        for concepts in ([concept(0, 0)], [concept(0, 1), *[concept(i, 0) for i in range(1, 5)]]):
+            with self.assertRaisesRegex(IngestionError, "5–10"):
+                resolve_plan({"concepts": concepts}, passages)
+
+    def test_source_windows_preserve_source_and_stable_ids(self):
         text = ('A long sentence describing a mathematical relationship. ' * 50).strip()
         chunk = replace(self.materials[0].chunks[0], text=text, normalized_text=text)
         materials = (replace(self.materials[0], chunks=(chunk,)),)

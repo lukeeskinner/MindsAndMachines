@@ -154,7 +154,7 @@ class ValidationTests(unittest.TestCase):
 
     def test_valid_grounded_contract_and_server_only_answer_keys(self):
         concepts, questions = self.validate()
-        self.assertEqual(len(questions), 2 * len(concepts))
+        self.assertEqual(len(questions), max(5, 2 * len(concepts)))
         lookup = {c.chunk_id: c for m in self.materials for c in m.chunks}
         for question in questions:
             self.assertIn(question.concept_id, {c.concept_id for c in concepts})

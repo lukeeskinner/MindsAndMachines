@@ -13,7 +13,7 @@ from .teaching import PROCESS_TEMPLATES, validate_teaching
 from .passages import SYSTEM, build_passages, plan_schema, resolve_plan
 
 MAX_CONTEXT_CHARS = 24_000
-MAX_CONCEPTS = 4
+MAX_CONCEPTS = 5
 MAX_FILES = 8
 
 
@@ -109,7 +109,7 @@ def _validate_artifacts(text: str, materials: tuple, course_id: str) -> tuple[tu
             raise IngestionError("Duplicate concept ID.")
         ids.add(concept_id)
         concepts.append(Concept(concept_id, name, summary, refs))
-        for proposal in _items(item["questions"], 2, 4):
+        for proposal in _items(item["questions"], 2, 5):
             _object(proposal, {"prompt", "choices", "answer_index", "explanation", "source_refs"})
             prompt = _text(proposal["prompt"])
             choices = tuple(_text(choice) for choice in _items(proposal["choices"], 2, 4))
@@ -192,9 +192,34 @@ def _local_proposal(materials):
                 for kind, paragraphs in PROCESS_TEMPLATES.items()
             ]})
             if len(concepts) == MAX_CONCEPTS:
-                return {"concepts": concepts}
+                return _complete_local_bank(concepts)
     if not concepts:
         raise IngestionError("No readable source with at least eight words for local study questions.", materials=materials)
+    return _complete_local_bank(concepts)
+
+
+def _complete_local_bank(concepts):
+    """Fill a short local source-recall bank with distinct masked source spans.
+
+    Five source excerpts produce ten questions; narrow uploads receive five.
+    This remains deterministic reading practice, not generated subject expertise.
+    """
+    missing = max(0, 5 - sum(len(c["questions"]) for c in concepts))
+    for index in range(missing):
+        concept = concepts[index % len(concepts)]
+        words = concept["summary"].split()
+        # Nonoverlapping tail/middle spans, separate from the existing prefix task.
+        start = max(0, len(words) - 3 * (index // len(concepts) + 1))
+        answer = " ".join(words[start:start + 3])
+        masked = " ".join([*words[:start], "___", *words[start + 3:]])
+        slot = (index + 2) % 3
+        choices = ["[not stated in the source]", "[no matching source phrase]"]
+        choices.insert(slot, answer)
+        concept["questions"].append({
+            "prompt": f"For {concept['name']}, recall the missing phrase: {masked}",
+            "choices": choices, "answer_index": slot,
+            "explanation": concept["summary"], "source_refs": concept["source_refs"],
+        })
     return {"concepts": concepts}
 
 
@@ -228,7 +253,7 @@ async def process_course(paths: list[str | Path], *, title: str = "Uploaded cour
         raise
     if len({material.material_id for material in materials}) != len(materials):
         raise IngestionError("Duplicate source material.", materials=materials)
-    course_id = stable_id("course", "1", title, sorted(material.material_id for material in materials))
+    course_id = stable_id("course", "study-bank-2", title, sorted(material.material_id for material in materials))
     sources = [{"chunk_id": chunk.chunk_id, "normalized_text": chunk.normalized_text}
                for material in materials for chunk in material.chunks if chunk.status == "extracted"]
     if not sources:
@@ -237,7 +262,7 @@ async def process_course(paths: list[str | Path], *, title: str = "Uploaded cour
     warnings.append("Source evidence checks do not prove factual or pedagogical correctness; review before learner use.")
     if selected in {"fake", "local"}:
         raw = json.dumps(_local_proposal(materials))
-        warnings.append("Local demo templates use up to four distinct source excerpts; they are not a full course analysis.")
+        warnings.append("Local demo templates use up to five distinct source excerpts; they are not a full course analysis.")
         calls, label = 0, "local"
     else:
         if sum(len(source["normalized_text"]) for source in sources) > MAX_CONTEXT_CHARS:
