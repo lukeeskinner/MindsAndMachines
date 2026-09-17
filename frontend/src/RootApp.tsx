@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { App } from "./App";
+import { CourseProvider } from "./components/course/CourseContext";
+import type { CourseUploadAdapter } from "./lib/courses";
 import {
   clearAuthSession,
   completeHostedSignIn,
@@ -21,7 +23,7 @@ function routeFromHash(authenticated: boolean): Route {
 }
 
 // Setup data and selected File handles stay in this tab; learning state remains API-owned.
-export function RootApp() {
+export function RootApp({ courseAdapter }: { courseAdapter?: CourseUploadAdapter } = {}) {
   const [draft, setDraft] = useState(initialDraft);
   const [auth, setAuth] = useState<AuthSession | null>(() => readAuthSession());
   const [route, setRoute] = useState<Route>(() => routeFromHash(!!auth));
@@ -67,7 +69,7 @@ export function RootApp() {
     navigate("login");
   }
   return (
-    <>
+    <CourseProvider key={auth?.signedInAt ?? "signed-out"} adapter={courseAdapter}>
       {route === "login" && (
         <AuthScreen onAuthenticated={handleAuthenticated} />
       )}
@@ -88,6 +90,6 @@ export function RootApp() {
           />
         </div>
       )}
-    </>
+    </CourseProvider>
   );
 }

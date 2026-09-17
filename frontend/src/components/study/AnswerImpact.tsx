@@ -1,6 +1,6 @@
+import { useCourseLabels } from "../course/CourseContext";
 import { useId } from "react";
 import {
-  conceptName,
   percent,
   intervalWidth,
   activityNames,
@@ -8,6 +8,7 @@ import {
 } from "./model";
 
 export function AnswerImpact({ entry }: { entry: StudyEntry }) {
+  const { conceptName } = useCourseLabels();
   const id = useId();
   const { question, result, before } = entry;
   const previous = before.find((c) => c.concept_id === question.concept_id);

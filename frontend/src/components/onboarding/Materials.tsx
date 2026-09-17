@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useCourse } from "../course/CourseContext";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowUpFromLine, Check, FileText, Paperclip, X } from "lucide-react";
 import { Button } from "../ui/button";
@@ -13,6 +14,9 @@ export function Materials({
   onChange: (files: File[]) => void;
   inputLabel?: string;
 }) {
+  const course = useCourse();
+  const locked = course?.upload.status === "processing";
+  const sent = course && course.upload.status !== "idle";
   const input = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
@@ -20,7 +24,9 @@ export function Materials({
   const [announcement, setAnnouncement] = useState("");
   const reduced = useReducedMotion();
   function add(incoming: File[]) {
+    if (locked) return;
     const result = selectFiles(files, incoming);
+    if (result.files.length !== files.length) course?.clearUpload();
     onChange(result.files);
     setErrors(result.errors);
     const count = result.files.length - files.length;
@@ -33,6 +39,7 @@ export function Materials({
       <input
         ref={input}
         type="file"
+        disabled={locked}
         multiple
         accept={ACCEPTED_FILES}
         className="sr-only"
@@ -83,13 +90,14 @@ export function Materials({
         <Button
           variant="secondary"
           className="mt-4 min-h-10 bg-surface px-4 py-2 text-sm"
+          disabled={locked}
           onClick={() => input.current?.click()}
         >
           <Paperclip size={15} />
           Choose files
         </Button>
         <p className="mt-3 text-xs text-muted-foreground">
-          PDF, DOCX, PPTX, TXT, MD · 20 MB per file · up to 8 files
+          PDF, PPTX · 20 MB per file · up to 8 files
         </p>
       </div>
       {errors.length > 0 && (
@@ -110,7 +118,7 @@ export function Materials({
             <span>
               {files.length} {files.length === 1 ? "file" : "files"} selected
             </span>
-            <span>In this tab only</span>
+            <span>{sent ? "Selected files" : "In this tab only"}</span>
           </div>
           <ul className="materials-list" aria-label="Selected course materials">
             <AnimatePresence initial={false}>
@@ -147,7 +155,9 @@ export function Materials({
                     size="icon"
                     className="size-11 shrink-0 text-muted-foreground hover:bg-coral/10 hover:text-foreground"
                     aria-label={`Remove ${file.name}`}
+                    disabled={locked}
                     onClick={() => {
+                      course?.clearUpload();
                       onChange(
                         files.filter(
                           (existing) => fileKey(existing) !== fileKey(file),
@@ -166,8 +176,9 @@ export function Materials({
         </div>
       )}
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
-        Files stay in this tab. They haven’t been uploaded or processed, and are
-        not supplied to the tutor.
+        {sent
+          ? "An upload was requested for these files. See the course status for the confirmed result."
+          : "Files stay in this tab. They haven’t been uploaded or processed, and are not supplied to the tutor."}
       </p>
       <span className="sr-only" role="status">
         {announcement}

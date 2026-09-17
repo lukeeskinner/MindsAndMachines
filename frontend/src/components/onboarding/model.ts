@@ -33,7 +33,7 @@ export const goals: { id: LearningGoal; label: string; description: string }[] =
   ];
 export const MAX_FILES = 8;
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
-export const ACCEPTED_FILES = ".pdf,.docx,.pptx,.txt,.md";
+export const ACCEPTED_FILES = ".pdf,.pptx";
 const extensions = new Set(ACCEPTED_FILES.split(",").map((s) => s.slice(1)));
 export const fileKey = (file: File) =>
   `${file.name}:${file.size}:${file.lastModified}`;
@@ -42,7 +42,7 @@ export function selectFiles(current: File[], incoming: File[]) {
   const errors: string[] = [];
   for (const file of incoming) {
     if (!extensions.has(file.name.split(".").at(-1)?.toLowerCase() ?? "")) {
-      errors.push(`${file.name}: choose a PDF, DOCX, PPTX, TXT, or MD file.`);
+      errors.push(`${file.name}: choose a PDF or PPTX file.`);
     } else if (file.size === 0) {
       errors.push(`${file.name}: this file is empty.`);
     } else if (file.size > MAX_FILE_BYTES) {

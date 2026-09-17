@@ -4,6 +4,8 @@ import { Button, Scene } from "../ui/primitives";
 import { Input } from "../ui/input";
 import { NativeSelect } from "../ui/native-select";
 import { Materials } from "../onboarding/Materials";
+import { CourseUpload } from "../course/CourseUpload";
+import { useCourseLabels } from "../course/CourseContext";
 import {
   goals,
   formatDate,
@@ -21,6 +23,7 @@ export function MaterialsWorkspace({
   draft: CourseDraft;
   onChange: (draft: CourseDraft) => void;
 }) {
+  const { course } = useCourseLabels();
   const id = useId();
   const [editing, setEditing] = useState(false);
   const [values, setValues] = useState(draft);
@@ -62,9 +65,10 @@ export function MaterialsWorkspace({
         <div className="materials-notice">
           <FolderOpen size={19} aria-hidden="true" />
           <p>
-            <strong>Your local course draft</strong> Files and goals stay in
-            this tab until refresh or sign-out. They aren’t part of tutor
-            context yet. Practice continues with the Intro AI demo.
+            <strong>{course ? course.title : "Your local course draft"}</strong>{" "}
+            {course ? "This course is selected for study. Uploading other files does not change your session until you activate their course."
+              : "Practice continues with the Intro AI demo until you activate a processed course."}
+            {" "}Goals stay in this tab until refresh or sign-out.
           </p>
         </div>
         <div className="materials-columns">
@@ -84,6 +88,7 @@ export function MaterialsWorkspace({
                 ? "Add or remove files as your course takes shape."
                 : "Start with your lecture notes, or add them later."}
             </p>
+            <CourseUpload files={draft.files} title={draft.courseName} />
             <Materials
               files={draft.files}
               inputLabel="Add materials to workspace"
@@ -204,7 +209,7 @@ export function MaterialsWorkspace({
                 <dl className="materials-summary">
                   <div>
                     <dt>Course</dt>
-                    <dd>{draft.courseName.trim() || "Not named yet"}</dd>
+                    <dd>{course?.title ?? (draft.courseName.trim() || "Not named yet")}</dd>
                   </div>
                   <div>
                     <dt>Goal</dt>

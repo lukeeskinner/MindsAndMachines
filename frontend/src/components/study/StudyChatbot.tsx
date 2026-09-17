@@ -1,3 +1,4 @@
+import { useCourseLabels } from "../course/CourseContext";
 import { useRef, useState } from "react";
 import {
   ArrowDown,
@@ -15,7 +16,7 @@ import type {
 import { Button, Disclosure, Scene } from "../ui/primitives";
 import { TeachingSource } from "./TeachingSource";
 import { TeachingPreferences } from "./TeachingPreferences";
-import { conceptName, percent, type StudyEntry } from "./model";
+import { percent, type StudyEntry } from "./model";
 
 type Props = {
   entries: StudyEntry[];
@@ -44,6 +45,7 @@ export function StudyChatbot({
   error,
   onManageMaterials,
 }: Props) {
+  const { conceptName, course } = useCourseLabels();
   const [draft, setDraft] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
   const latestMessage = useRef<HTMLLIElement>(null);
@@ -278,8 +280,8 @@ export function StudyChatbot({
               </div>
             </dl>
             <p className="chat-context-note">
-              This demo uses practice responses. Course files and setup goals
-              have not been processed or sent to the tutor.
+              {course ? `This session uses ${course.title}. Sources: ${course.source_filenames.join(", ")}. Setup goals remain local.`
+                : "This demo uses practice responses. Local setup files and goals are not used in this demo session."}
             </p>
           </Disclosure>
           {onManageMaterials && (
