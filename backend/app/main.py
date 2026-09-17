@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.app.agents.real_assessor import RealAssessor
 from backend.app.agents.coordinator import Coordinator
 from backend.app.agents.provider import log_configuration
+from backend.app.api.courses import course_router_for
 from backend.app.api.routes import router_for
 from backend.app.learner.bayesian import BayesianLearner
 from backend.app.policy.adaptive import AdaptivePolicy
@@ -24,6 +25,7 @@ def create_app(coordinator: Coordinator | None = None, *,
     store = DynamoStore() if dynamo_configured() else MemoryStore()
     course_registry = course_registry if course_registry is not None else MemoryCourseRegistry()
     app.include_router(router_for(coordinator, store, catalog, course_registry))
+    app.include_router(course_router_for(course_registry))
     frontend = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if frontend.exists():
         app.mount("/", StaticFiles(directory=frontend, html=True), name="frontend")
