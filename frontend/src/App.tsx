@@ -286,6 +286,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
       ]);
       setConcepts(result.concepts);
       setQuestion(result.next_question);
+      if (result.flashcards) setFlashcards(result.flashcards);
       setAnswer("");
       setReviewing(true);
       setSelectedConcept(question.concept_id);

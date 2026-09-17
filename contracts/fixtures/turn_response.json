@@ -98,5 +98,63 @@
     "update",
     "select",
     "teach"
+  ],
+  "flashcards": [
+    {
+      "card_id": "demo-card-6",
+      "concept_id": "admissibility_vs_consistency",
+      "front": "How are consistency and admissibility connected?",
+      "back": "With nonnegative edge costs and h(goal)=0, consistency implies admissibility. An admissible heuristic can still violate consistency on an edge.",
+      "source": "Intro AI · study notes"
+    },
+    {
+      "card_id": "demo-card-7",
+      "concept_id": "admissibility_vs_consistency",
+      "front": "How would you check both properties on a small graph?",
+      "back": "First compute the cheapest remaining cost at each node and compare each estimate with that cost. Then check the consistency inequality separately on every edge.",
+      "source": "Intro AI · study notes"
+    },
+    {
+      "card_id": "demo-card-1",
+      "concept_id": "bfs",
+      "front": "What order does breadth-first search explore?",
+      "back": "It explores by depth: all nodes one edge away, then two edges away, and so on. With equal edge costs, this finds a shortest path.",
+      "source": "Intro AI · study notes"
+    },
+    {
+      "card_id": "demo-card-2",
+      "concept_id": "ucs",
+      "front": "How does uniform-cost search choose its next node?",
+      "back": "It expands the frontier node with the lowest accumulated path cost g(n). Unlike breadth-first search, it accounts for different edge costs.",
+      "source": "Intro AI · study notes"
+    },
+    {
+      "card_id": "demo-card-3",
+      "concept_id": "astar",
+      "front": "What does A* combine in its priority f(n)?",
+      "back": "f(n) = g(n) + h(n): the cost already paid to reach a node, plus an estimate of the remaining cost to a goal.",
+      "source": "Intro AI · study notes"
+    },
+    {
+      "card_id": "demo-card-4",
+      "concept_id": "admissibility",
+      "front": "What does it mean for a heuristic to be admissible?",
+      "back": "At every node, its estimate is no greater than the actual cheapest remaining path cost: h(n) ≤ h*(n).",
+      "source": "Intro AI · study notes"
+    },
+    {
+      "card_id": "demo-card-5",
+      "concept_id": "consistency",
+      "front": "What local check defines a consistent heuristic?",
+      "back": "For every edge n → n′, h(n) ≤ c(n,n′) + h(n′). The estimate cannot drop by more than the cost of that step.",
+      "source": "Intro AI · study notes"
+    },
+    {
+      "card_id": "demo-card-8",
+      "concept_id": "astar",
+      "front": "What happens when A* uses h(n)=0 everywhere?",
+      "back": "Its priority becomes g(n), so it orders the frontier like uniform-cost search. The zero heuristic is admissible and consistent for nonnegative edge costs.",
+      "source": "Intro AI · study notes"
+    }
   ]
 }

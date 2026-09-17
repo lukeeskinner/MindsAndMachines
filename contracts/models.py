@@ -170,3 +170,4 @@ class TurnResponse(Record):
     mode: Literal["dummy", "live"] = "dummy"
     provider: Literal["fake", "bedrock"] = "fake"
     trace: list[str]
+    flashcards: list[Flashcard] = Field(default_factory=list)

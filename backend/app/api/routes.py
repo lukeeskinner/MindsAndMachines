@@ -7,6 +7,7 @@ from backend.app.storage.memory import MemoryStore, Session
 from backend.app.storage.courses import MemoryCourseRegistry
 from backend.app.teaching.catalog import Catalog
 from backend.app.teaching.flashcards import demo_flashcards, course_flashcards
+from backend.app.teaching.remediation import RemediationTurn, rank_flashcards
 from backend.app.ingestion.models import IngestionError
 from backend.app.teaching.runtime_catalog import RuntimeAvailability, RuntimeCatalog, build_runtime_catalog
 from contracts.models import HistoryEntry, SessionRequest, SessionResponse, TurnRequest, TurnResponse
@@ -60,6 +61,11 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
         except KeyError:
             raise HTTPException(404, "Session not found. Start a new session.") from None
         runtime = course_runtime(session.course_id) if session.course_id is not None else catalog
+        if isinstance(runtime, RuntimeCatalog):
+            try:
+                runtime.apply_session_questions(session.generated_questions)
+            except ValueError:
+                raise HTTPException(500, "Learning activity configuration error. Start a new session.") from None
         if request.question_id != session.question_id:
             raise HTTPException(400, "Please answer the current question or start a new session.")
         try:
@@ -86,9 +92,10 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
                     raise IntegrationError("Course history contains foreign IDs") from exc
                 candidates = list(availability.candidates)
                 active_coordinator = course_coordinator(runtime, availability)
+            remediation = RemediationTurn(session.course_id, session.remediation_focus)
             update, response = await active_coordinator.run_turn(
                 request, question, session.learner_state, session.history,
-                candidates, runtime.questions,
+                candidates, runtime.questions, remediation=remediation,
             )
         except TurnTimeoutError:
             raise HTTPException(504, "Learning turn timed out. Start a new session.") from None
@@ -97,9 +104,15 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
         entry = HistoryEntry(question_id=question.question_id,
                              evidence_applied=update.evidence_applied,
                              candidate_id=response.decision.candidate_id if response.decision else None)
+        generated = dict(session.generated_questions)
+        if remediation.generated is not None:
+            generated[remediation.generated.question.question_id] = remediation.generated
+        cards = course_flashcards(runtime.course) if isinstance(runtime, RuntimeCatalog) else demo_flashcards()
+        response.flashcards = rank_flashcards(cards, update.concepts, remediation.focus, session.course_id)
         store.save_session(request.session_id, Session(
             response.next_question.question_id if response.next_question else None,
             update.state, [*session.history, entry], session.user_id, session.course_id,
+            remediation.focus, generated,
         ))
         return response
 

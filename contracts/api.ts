@@ -52,6 +52,7 @@ export interface TurnRequest {
   presentation_preferences?: LearnerPresentationPreferences;
 }
 export interface TurnResponse {
+  flashcards?: Flashcard[];
   session_id: string;
   assessment: {
     outcome: 'correct' | 'incorrect' | 'unclear';

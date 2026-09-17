@@ -10,6 +10,8 @@ from uuid import uuid4
 
 from backend.app.storage.memory import Session
 from contracts.models import HistoryEntry, LearnerState
+from backend.app.teaching.remediation import RemediationFocus
+from backend.app.teaching.targeted_questions import GeneratedQuestion
 
 
 def dynamo_configured() -> bool:
@@ -43,6 +45,9 @@ class DynamoStore:
             history=[HistoryEntry(**entry) for entry in data["history"]],
             user_id=data.get("user_id"),
             course_id=data.get("course_id"),
+            remediation_focus=RemediationFocus(**data["remediation_focus"]) if data.get("remediation_focus") else None,
+            generated_questions={key: GeneratedQuestion(**value)
+                                 for key, value in data.get("generated_questions", {}).items()},
         )
 
     def save_session(self, session_id: str, session: Session) -> None:
@@ -55,5 +60,7 @@ class DynamoStore:
             "history": [entry.model_dump() for entry in session.history],
             "user_id": session.user_id,
             "course_id": session.course_id,
+            "remediation_focus": session.remediation_focus.model_dump() if session.remediation_focus else None,
+            "generated_questions": {key: value.model_dump() for key, value in session.generated_questions.items()},
         }
         self._table.put_item(Item={"session_id": session_id, "data": json.dumps(data)})

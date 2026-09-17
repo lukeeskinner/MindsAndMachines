@@ -255,6 +255,8 @@ class UploadedCourseRuntimeTests(unittest.TestCase):
                 output = proposal
             elif "trusted_outcome" in data:
                 output = {"misconception_id": None, "feedback": "Check the relationship described in the material."}
+            elif data.get("task") == "targeted_remediation":
+                output = {}  # Invalid generation preserves the authored fresh question.
             else:
                 tutor_prompts.append(data)
                 output = {"text": "Which detail in the passage helps you respond to the task?"}
@@ -270,7 +272,7 @@ class UploadedCourseRuntimeTests(unittest.TestCase):
             result = self.turn(session, session["question"], wrong)
         self.assertEqual(result.status_code, 200, result.text)
         body = result.json()
-        self.assertEqual(self.provider.await_count, 3)  # Ingestion + assessor + exactly one Tutor call.
+        self.assertEqual(self.provider.await_count, 4)  # Ingestion + assessor + Tutor + one generation attempt.
         self.assertEqual(len(tutor_prompts), 1)
         self.assertEqual(body["tutor"]["teaching_source"], "bedrock")
         self.assertEqual(body["provider"], "bedrock")
@@ -282,7 +284,7 @@ class UploadedCourseRuntimeTests(unittest.TestCase):
         local_result = self.turn(local, local["question"], wrong).json()
         for field in ("concepts", "decision", "next_question"):
             self.assertEqual(body[field], local_result[field])
-        self.assertEqual(self.provider.await_count, 3)
+        self.assertEqual(self.provider.await_count, 4)
 
     def test_invalid_or_timed_out_tutor_falls_back_without_retry(self):
         public = self.upload()

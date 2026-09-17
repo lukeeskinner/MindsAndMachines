@@ -2,9 +2,10 @@
 from dataclasses import dataclass
 from typing import Iterable
 
-from backend.app.ingestion.models import IngestionError, ProcessedCourse, stable_id
+from backend.app.ingestion.models import IngestionError, ProcessedCourse, SourceReference, stable_id
 from backend.app.ingestion.teaching import DRAFT_NOTICE, PROCESS_TEMPLATES, validate_teaching
 from backend.app.storage.courses import adapt_question
+from backend.app.teaching.targeted_questions import GeneratedQuestion
 from contracts.models import (
     Assessment, Candidate, Choice, ConceptEstimate, Decision,
     LearnerPresentationPreferences, Question, TeachingResult,
@@ -94,6 +95,26 @@ class RuntimeCatalog:
     def question(self, question_id: str) -> Question:
         return self.questions[question_id].model_copy(deep=True)
 
+    def apply_session_questions(self, generated_questions: dict[str, GeneratedQuestion]) -> None:
+        """Replace fresh bank slots on this request's catalog, never the course artifact."""
+        for key, record in generated_questions.items():
+            question = record.question
+            original = self.questions.get(record.replaces_question_id)
+            if (record.course_id != self.course.course_id or key != question.question_id
+                    or original is None or original.concept_id != question.concept_id
+                    or key in self.questions):
+                raise ValueError("Foreign session question overlay")
+            self.questions = {
+                key if qid == record.replaces_question_id else qid:
+                question.model_copy(deep=True) if qid == record.replaces_question_id else item
+                for qid, item in self.questions.items()
+            }
+            self.question_provenance[key] = (SourceReference(record.source_chunk_id, record.source_quote),)
+            for candidate in self.candidates:
+                if candidate.next_question_id == record.replaces_question_id:
+                    candidate.next_question_id = key
+        self._bindings = {c.candidate_id: c.model_dump() for c in self.candidates}
+
     def eligible_candidates(self, *, current_question_id: str,
                             consumed_question_ids: Iterable[str] = (),
                             consumed_candidate_ids: Iterable[str] = ()) -> RuntimeAvailability:
@@ -108,7 +129,7 @@ class RuntimeCatalog:
         used_candidates = set(consumed_candidate_ids)
         if not consumed <= self.questions.keys() or not used_candidates <= self._bindings.keys():
             raise ValueError("Consumed IDs must belong to this course catalog.")
-        remaining = [q for q in self.course.questions if q.question_id not in consumed]
+        remaining = [q for q in self.questions.values() if q.question_id not in consumed]
         local = [q for q in remaining if q.concept_id == current.concept_id]
         next_question = next((q for cid in self.concept_ids for q in remaining if q.concept_id == cid), None)
         eligible = tuple(Candidate(**binding) for binding in self._bindings.values()

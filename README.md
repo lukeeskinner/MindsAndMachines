@@ -19,6 +19,14 @@ repeat the cards marked again or restart the deck. Switching views preserves the
 quiz answer and deck position; reset clears both. Flashcards never add assessment
 evidence or invoke the provider.
 
+After a quiz answer, the server prioritizes existing flashcards using the same
+Bayesian estimates and trusted remediation focus as the question mode. A new
+assessment refreshes deck order while retaining self-ratings. In Bedrock mode,
+an accepted incorrect answer can produce one source-grounded, session-only
+replacement for the policy's fresh question slot. Local mode keeps the existing
+bank. See [adaptive remediation](docs/ADAPTIVE_REMEDIATION.md) for triggers,
+privacy, validation limits and verification.
+
 Prerequisites: macOS/Linux, Python 3.12 or 3.13, Node.js 22.12+ (tested with Node 24), npm, and make. Windows users can use WSL; native Windows execution is not verified.
 
 One-time dependency setup (requires package-registry access):
@@ -75,7 +83,20 @@ MODEL_PROVIDER=bedrock AWS_REGION=us-east-1 BEDROCK_MODEL_ID=amazon.nova-lite-v1
 
 Open [the learning lab](http://127.0.0.1:5173) and follow the first-answer walkthrough. Accepted Bedrock prose shows **AI-generated teaching**; provider timeout/error or rejected output shows **Reviewed fallback**, with the same policy-selected next question. Completion is authored even in Bedrock mode. `MODEL_PROVIDER=fake` (the default) or `local` never invokes the provider through Assessment or Tutor. Selected files remain local until **Upload course**; uploaded content is processed by the backend, and course Tutor personalization receives the selected artifact's display-safe grounding.
 
-Each turn caps assessment provider work at 4 seconds and Tutor provider work at 12 seconds, within an 18-second coordinator deadline. The browser keeps its 20-second request timeout. `BEDROCK_TIMEOUT_SECONDS` defaults to 12 and accepts values above zero up to 15; each interactive call uses the smallest configured, stage and remaining turn budget. The two sequential provider waits total at most 16 seconds, reserving 2 seconds for local turn work and 2 seconds for HTTP overhead. If the total coordinator deadline expires, the API returns a controlled 504 before saving the turn. This bounds asynchronous turn work, not external storage/network delays or synchronous event-loop stalls. A timed-out SDK thread can finish later, but its result is ignored and cannot update the session. SDK socket deadlines are also set and retries are disabled. No provider switching or whole-turn retries occur. Do not store credentials in repository files. `make check` and `make smoke` use mocked/local providers and do not test live AWS access.
+Each turn caps assessment provider work at 4 seconds, then runs Tutor (12 seconds)
+alongside eligible targeted-question generation (8 seconds), within the existing
+18-second coordinator deadline. The browser keeps its 20-second request timeout.
+`BEDROCK_TIMEOUT_SECONDS` defaults to 12 and accepts values above zero up to 15;
+each interactive call uses the smallest configured, stage and remaining turn
+budget. Assessment plus the parallel stage waits total at most 16 seconds,
+reserving 2 seconds for local work and 2 for HTTP overhead. Generation failure
+retains the policy's original fresh question. If the total coordinator deadline
+expires, the API returns a controlled 504 before saving the turn. This bounds
+asynchronous work, not external storage/network delays or event-loop stalls.
+A timed-out SDK thread can finish later, but its result is ignored and cannot
+update the session. SDK socket deadlines are set and retries disabled. No provider
+switching or whole-turn retries occur. Do not store credentials in repository
+files. `make check` and `make smoke` use mocked/local providers, never live AWS.
 
 Course generation is a larger, separate upload request. Its single provider call
 uses `BEDROCK_INGESTION_TIMEOUT_SECONDS`, default 60 seconds, allowed above zero up
