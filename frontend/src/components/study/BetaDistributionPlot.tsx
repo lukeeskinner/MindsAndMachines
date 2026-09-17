@@ -17,8 +17,8 @@ export function betaCurve(alpha: number, beta: number) {
   });
 }
 
-export function BetaDistributionPlot({ current, before, compact = false, beforeLabel = "session start" }: {
-  current: ConceptEstimate; before?: ConceptEstimate; compact?: boolean; beforeLabel?: string;
+export function BetaDistributionPlot({ current, before, compact = false, simpleCaption = false, beforeLabel = "session start" }: {
+  current: ConceptEstimate; before?: ConceptEstimate; compact?: boolean; simpleCaption?: boolean; beforeLabel?: string;
 }) {
   if (current.alpha == null || current.beta == null) return null;
   const points = betaCurve(current.alpha, current.beta);
@@ -46,8 +46,8 @@ export function BetaDistributionPlot({ current, before, compact = false, beforeL
     </svg>
     {!compact && <figcaption>
       {before && <span>Dashed: {beforeLabel} · Solid: now. </span>}
-      Mean {pct(current.mean)} · 90% interval {pct(current.interval90.lower)}–{pct(current.interval90.upper)}.
-      <span className="beta-scale"> Density height scaled per plot{before ? "; both curves share the same scale" : ""}.</span>
+      {!simpleCaption && <>Mean {pct(current.mean)} · 90% interval {pct(current.interval90.lower)}–{pct(current.interval90.upper)}.</>}
+      {simpleCaption ? <span>Shading: 90% uncertainty range.</span> : <span className="beta-scale"> Density height scaled per plot{before ? "; both curves share the same scale" : ""}.</span>}
     </figcaption>}
   </figure>;
 }

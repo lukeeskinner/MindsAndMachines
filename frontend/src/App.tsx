@@ -46,7 +46,7 @@ import { createSession, CourseError } from "./lib/courses";
 import { CourseBoundary, useCourseLabels } from "./components/course/CourseContext";
 import { FocusRanking } from "./components/study/FocusRanking";
 import { BetaDistributionPlot } from "./components/study/BetaDistributionPlot";
-import { AnswerImpact } from "./components/study/AnswerImpact";
+import { AnswerImpact, AnswerModelDetails, NextStep } from "./components/study/AnswerImpact";
 import { Flashcards } from "./components/study/Flashcards";
 import {
   TeachingSource,
@@ -330,6 +330,100 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
     );
   }
 
+  const inspector = <>
+                <section className="knowledge-panel">
+                  <div className="inspector-heading">
+                    <h2>Your understanding</h2>
+                    <span className="tag">{concepts.length} concepts</span>
+                  </div>
+                  <p className="inspector-description">
+                    Mastery estimates, with uncertainty.
+                  </p>
+                  <div className="concept-list">
+                    {concepts.length ? (
+                      concepts.map((concept) => (
+                        <button
+                          key={concept.concept_id}
+                          className={`concept-row ${selectedConcept === concept.concept_id ? "is-selected" : ""}`}
+                          onClick={() => setSelectedConcept(concept.concept_id)}
+                          aria-pressed={selectedConcept === concept.concept_id}
+                        >
+                          <span className="concept-row-title">
+                            {names[concept.concept_id] ?? concept.concept_id}
+                            {!complete && concept.concept_id === focusConcept && (
+                              <span className="concept-practice-label">
+                                Practicing
+                              </span>
+                            )}
+                          </span>
+                          <BetaDistributionPlot current={concept} compact />
+                          <small>{concept.evidence_count} observations</small>
+                          <strong>
+                            {concept.evidence_count
+                              ? pct(concept.mean)
+                              : "No evidence"}
+                          </strong>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="concept-loading" role="status">
+                        Waiting for concept estimates…
+                      </div>
+                    )}
+                  </div>
+                  {selected && (
+                    <div className="concept-detail" key={selected.concept_id}>
+                      <div className="detail-heading">
+                        <span>{shortNames[selected.concept_id] ?? selected.concept_id}</span>
+                        <span>
+                          {selected.evidence_count}{" "}
+                          {selected.evidence_count === 1
+                            ? "observation"
+                            : "observations"}
+                        </span>
+                      </div>
+                      <p className="detail-estimate">
+                        Understanding estimate:{" "}
+                        <strong>{pct(selected.mean)}</strong>
+                      </p>
+                      <BetaDistributionPlot current={selected} />
+                      <Estimate concept={selected} />
+                      <p>
+                        {selected.evidence_count === 0
+                          ? "A starting estimate. We need evidence to learn more."
+                          : "Only accepted answers on this concept supply evidence."}
+                      </p>
+                    </div>
+                  )}
+                  <Button variant="ghost" disabled={busy} onClick={() => setConfirmReset(true)}>Reset learner profile</Button>
+                  {confirmReset && <div role="group" aria-label="Confirm learner reset">
+                    <p>Erase accumulated evidence and return every concept to its starting distribution?</p>
+                    <Button disabled={busy} onClick={() => void newSession(true)}>Erase evidence and restart</Button>
+                    <Button variant="ghost" onClick={() => setConfirmReset(false)}>Keep my evidence</Button>
+                  </div>}
+                  <Disclosure title="How to read these estimates">
+                    <p>
+                      Experimental predicted success on similar unaided
+                      questions. The marker is the estimate; the shaded range is
+                      its 90% interval.
+                    </p>
+                    <p>
+                      Bayesian estimates update from accepted answer evidence.
+                      Explanations alone never increase an estimate.
+                    </p>
+                  </Disclosure>
+                </section>
+                <TeachingPreferences
+                  preferences={preferences}
+                  onChange={setPreferences}
+                  busy={busy}
+                />
+                <div className="inspector-footnote">
+                  <Info size={14} />
+                  <span>Practice space. Not a grade.</span>
+                </div>
+  </>;
+
   return (
     <MotionConfig reducedMotion="user">
       <Tabs
@@ -536,7 +630,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                 </Button>
               </div>
             )}
-            <div className="desk-layout" data-view={view}>
+            <div className="desk-layout" data-view={view} data-feedback={view === "study" && studyMode === "practice" && reviewing}>
               <div className="primary-column">
                 <TabsContent
                   value="overview"
@@ -618,7 +712,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                     </span>
                   </div>
                   {practiceNotice && <p role="status">{practiceNotice}</p>}
-                  {focusId && (() => {
+                  {focusId && !reviewing && (() => {
                     const current = concepts.find(c => c.concept_id === focusId);
                     const before = sessionStart.find(c => c.concept_id === focusId);
                     return current && before ? <section className="focus-progress" aria-label="Focus practice progress">
@@ -653,60 +747,34 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                     ) : review ? (
                       <Scene key={`review-${entries.length}`}>
                         <div className="surface-meta">
-                          <Outcome result={review.result} />
-                          <span>REFLECTION {entries.length}</span>
+                          <span>FEEDBACK {entries.length}</span>
+                          <TeachingSource result={review.result} />
                         </div>
-                        <h2
-                          ref={focusHeading}
-                          tabIndex={-1}
-                          className="surface-title"
-                        >
-                          {complete
-                            ? "One loop, a little more clarity."
-                            : "Here’s the useful distinction."}
+                        <h2 ref={focusHeading} tabIndex={-1} className="surface-title feedback-title">
+                          {review.result.assessment.outcome === "correct" ? "Correct — nicely done."
+                            : review.result.assessment.outcome === "incorrect" ? "Not quite — let’s unpack it."
+                            : "Not sure yet? Let’s work through it."}
                         </h2>
+                        <p className="feedback-explanation">{review.result.assessment.feedback}</p>
+                        <Button variant="ghost" onClick={openChatbot} className="feedback-explanation-link">
+                          <MessageSquare size={16} />Read explanation<ArrowRight size={15} />
+                        </Button>
                         <AnswerImpact entry={review} />
-                        <Disclosure title="Review your answer">
-                          <p>{review.question.prompt}</p>
-                          <div className="submitted-answer">
-                            <span>Your choice</span>
-                            {
-                              review.question.choices.find(
-                                (choice) => choice.id === review.answer,
-                              )?.text
-                            }
-                          </div>
-                        </Disclosure>
-                        <div className="tutor-handoff">
-                          <MessageSquare size={23} aria-hidden="true" />
-                          <div>
-                            <h3>
-                              {review.result.decision
-                                ? activityNames[review.result.decision.kind]
-                                : "Tutor reflection"}
-                            </h3>
-                            <TeachingSource result={review.result} />
-                            <p>Your explanation is ready in Chatbot.</p>
-                          </div>
-                          <Button variant="secondary" onClick={openChatbot}>
-                            Read explanation
-                            <ArrowRight size={16} />
-                          </Button>
-                        </div>
-                        <Trace result={review.result} />
-                        <div className="surface-footer">
-                          <span>
-                            {complete
-                              ? "Practice completed. Estimates remain experimental."
-                              : "Read the explanation, then try the next question."}
-                          </span>
+                        <div className="surface-footer feedback-footer">
+                          <NextStep entry={review} />
                           <Button onClick={() => { setReviewing(false); if (question) setSelectedConcept(question.concept_id); }}>
-                            {complete
-                              ? "Session recap"
-                              : "Try the next question"}
-                            <ArrowRight size={17} />
+                            {complete ? "Session recap" : "Continue"}<ArrowRight size={17} />
                           </Button>
                         </div>
+                        <Disclosure title="See model details">
+                          <AnswerModelDetails entry={review} />
+                          <h3>Your answer</h3>
+                          <p>{review.question.prompt}</p>
+                          <p>{review.question.choices.find(choice => choice.id === review.answer)?.text ?? review.answer}</p>
+                          {focusId && <p>Focus practice continues your existing learner model. The recap compares session start with current evidence.</p>}
+                          <Trace result={review.result} />
+                          {inspector}
+                        </Disclosure>
                       </Scene>
                     ) : question ? (
                       <Scene key={question.question_id}>
@@ -853,7 +921,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                       </Scene>
                     )}
                   </section>
-                  <div className="learning-note">
+                  <div className="learning-note" hidden={reviewing}>
                     <span className="note-line" />
                     <div>
                       <h3>
@@ -1115,101 +1183,12 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                 hidden={
                   view === "overview" ||
                   view === "chatbot" ||
-                  view === "materials"
+                  view === "materials" ||
+                  (view === "study" && studyMode === "practice" && reviewing)
                 }
                 aria-label="Concept estimates and teaching preferences"
               >
-                <section className="knowledge-panel">
-                  <div className="inspector-heading">
-                    <h2>Your understanding</h2>
-                    <span className="tag">{concepts.length} concepts</span>
-                  </div>
-                  <p className="inspector-description">
-                    Mastery estimates, with uncertainty.
-                  </p>
-                  <div className="concept-list">
-                    {concepts.length ? (
-                      concepts.map((concept) => (
-                        <button
-                          key={concept.concept_id}
-                          className={`concept-row ${selectedConcept === concept.concept_id ? "is-selected" : ""}`}
-                          onClick={() => setSelectedConcept(concept.concept_id)}
-                          aria-pressed={selectedConcept === concept.concept_id}
-                        >
-                          <span className="concept-row-title">
-                            {names[concept.concept_id] ?? concept.concept_id}
-                            {!complete && concept.concept_id === focusConcept && (
-                              <span className="concept-practice-label">
-                                Practicing
-                              </span>
-                            )}
-                          </span>
-                          <BetaDistributionPlot current={concept} compact />
-                          <small>{concept.evidence_count} observations</small>
-                          <strong>
-                            {concept.evidence_count
-                              ? pct(concept.mean)
-                              : "No evidence"}
-                          </strong>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="concept-loading" role="status">
-                        Waiting for concept estimates…
-                      </div>
-                    )}
-                  </div>
-                  {selected && (
-                    <div className="concept-detail" key={selected.concept_id}>
-                      <div className="detail-heading">
-                        <span>{shortNames[selected.concept_id] ?? selected.concept_id}</span>
-                        <span>
-                          {selected.evidence_count}{" "}
-                          {selected.evidence_count === 1
-                            ? "observation"
-                            : "observations"}
-                        </span>
-                      </div>
-                      <p className="detail-estimate">
-                        Understanding estimate:{" "}
-                        <strong>{pct(selected.mean)}</strong>
-                      </p>
-                      <BetaDistributionPlot current={selected} />
-                      <Estimate concept={selected} />
-                      <p>
-                        {selected.evidence_count === 0
-                          ? "A starting estimate. We need evidence to learn more."
-                          : "Only accepted answers on this concept supply evidence."}
-                      </p>
-                    </div>
-                  )}
-                  <Button variant="ghost" disabled={busy} onClick={() => setConfirmReset(true)}>Reset learner profile</Button>
-                  {confirmReset && <div role="group" aria-label="Confirm learner reset">
-                    <p>Erase accumulated evidence and return every concept to its starting distribution?</p>
-                    <Button disabled={busy} onClick={() => void newSession(true)}>Erase evidence and restart</Button>
-                    <Button variant="ghost" onClick={() => setConfirmReset(false)}>Keep my evidence</Button>
-                  </div>}
-                  <Disclosure title="How to read these estimates">
-                    <p>
-                      Experimental predicted success on similar unaided
-                      questions. The marker is the estimate; the shaded range is
-                      its 90% interval.
-                    </p>
-                    <p>
-                      Bayesian estimates update from accepted answer evidence.
-                      Explanations alone never increase an estimate.
-                    </p>
-                  </Disclosure>
-                </section>
-                <TeachingPreferences
-                  preferences={preferences}
-                  onChange={setPreferences}
-                  busy={busy}
-                />
-                <div className="inspector-footnote">
-                  <Info size={14} />
-                  <span>Practice space. Not a grade.</span>
-                </div>
+                {inspector}
               </aside>
             </div>
             <footer className="page-footer">

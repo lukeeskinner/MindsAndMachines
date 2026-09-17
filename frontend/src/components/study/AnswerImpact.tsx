@@ -8,7 +8,7 @@ import {
   type StudyEntry,
 } from "./model";
 
-export function AnswerImpact({ entry }: { entry: StudyEntry }) {
+export function AnswerModelDetails({ entry }: { entry: StudyEntry }) {
   const { conceptName } = useCourseLabels();
   const id = useId();
   const { question, result, before } = entry;
@@ -20,14 +20,12 @@ export function AnswerImpact({ entry }: { entry: StudyEntry }) {
   const unchanged = comparable && previous.mean === current.mean;
   return (
     <section className="answer-impact" aria-labelledby={`${id}-title`}>
-      <h3 id={`${id}-title`}>What changed?</h3>
+      <h3 id={`${id}-title`}>Model comparison</h3>
       <p className="assessed-concept">
         Assessed concept · <strong>{conceptName(question.concept_id)}</strong>
       </p>
-      <p className="impact-diagnosis">{result.assessment.feedback}</p>
       {comparable ? (
         <>
-          <BetaDistributionPlot current={current} before={previous} beforeLabel="before this answer" />
           <table className="snapshot-table">
             <caption className="sr-only">
               Before and after this answer for{" "}
@@ -41,6 +39,13 @@ export function AnswerImpact({ entry }: { entry: StudyEntry }) {
               </tr>
             </thead>
             <tbody>
+              {previous.alpha != null && previous.beta != null && current.alpha != null && current.beta != null && (
+                <tr>
+                  <th scope="row">Beta parameters (α, β)</th>
+                  <td>{previous.alpha}, {previous.beta}</td>
+                  <td>{current.alpha}, {current.beta}</td>
+                </tr>
+              )}
               <tr>
                 <th scope="row">Estimate</th>
                 <td>{percent(previous.mean)}</td>
@@ -133,4 +138,45 @@ export function AnswerImpact({ entry }: { entry: StudyEntry }) {
       </dl>
     </section>
   );
+}
+
+// Presentation of server snapshots only: no updates or policy scoring in the UI.
+export function AnswerImpact({ entry }: { entry: StudyEntry }) {
+  const { conceptName } = useCourseLabels();
+  const id = useId();
+  const current = entry.result.concepts.find(c => c.concept_id === entry.question.concept_id);
+  const previous = entry.before.find(c => c.concept_id === entry.question.concept_id);
+  const reasons = entry.result.analytics?.focus_ranking.find(c => c.concept_id === entry.question.concept_id)?.reasons;
+  return <section className="answer-impact" aria-labelledby={`${id}-title`}>
+    <h3 id={`${id}-title`}>What changed?</h3>
+    <p className="assessed-concept">{conceptName(entry.question.concept_id)}</p>
+    {current ? <>
+      <div className="impact-summary">
+        <div className="impact-chart">
+          <BetaDistributionPlot current={current} before={previous} beforeLabel="before this answer" simpleCaption />
+        </div>
+        <div className="impact-values">
+          <p><strong>{percent(current.mean)}</strong> understanding estimate</p>
+          {previous && previous.mean !== current.mean && <p className="estimate-change">{percent(previous.mean)} → {percent(current.mean)}</p>}
+          <p>{current.evidence_count} {current.evidence_count === 1 ? "observation" : "observations"}</p>
+          {reasons?.includes("high_uncertainty") && <p>Uncertainty is still high.</p>}
+        </div>
+      </div>
+      {previous && current.evidence_count === previous.evidence_count && <p className="evidence-status">No new observation recorded.{previous.mean === current.mean && " The understanding estimate is unchanged."}</p>}
+      {current.evidence_count === 0 && <p className="impact-note">No evidence yet for this concept; this is a starting estimate.</p>}
+    </> : <p className="evidence-status">An estimate is unavailable for this concept.</p>}
+  </section>;
+}
+
+export function NextStep({ entry }: { entry: StudyEntry }) {
+  const { conceptName } = useCourseLabels();
+  const next = entry.result.next_question;
+  const reasons = entry.result.analytics?.focus_ranking.find(c => c.concept_id === next?.concept_id)?.reasons;
+  return <div className="feedback-next">
+    <h3>{next ? `Next: ${next.concept_id === entry.question.concept_id ? "another " : ""}${conceptName(next.concept_id)} question` : "Next: your session recap"}</h3>
+    <p>{!next ? "Review your progress and choose what to practice next."
+      : next.review ? "Review item: seen before. This answer will not add mastery evidence."
+      : reasons?.some(r => r === "limited_evidence" || r === "high_uncertainty") ? "We still need more evidence on this concept."
+      : "Try a fresh question to check your understanding."}</p>
+  </div>;
 }
