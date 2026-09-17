@@ -17,6 +17,14 @@ labels its response as local notes. Conversation survives view changes and clear
 on reset/course change. Chat never grades an answer or changes Bayesian evidence.
 See [chat contracts and behavior](docs/CHAT.md).
 
+After each answer, feedback shows the result, up to three sentences from the returned
+tutor explanation, the concept's before/current posterior, estimate, observation
+count and next step. **Continue** opens the next question. **See model details**
+reveals the complete comparison, assessment feedback, exact policy rationale,
+next-question context and all concept estimates/preferences. **Read explanation**
+opens the complete returned teaching in Chatbot. Session recap retains the richer
+plots, comparisons and focus-practice actions.
+
 ## Run locally
 
 The study desk includes **Practice quiz** and **Flashcards**. The demo has eight
@@ -96,7 +104,7 @@ The smoke starts/stops its own server on an available loopback port. No separate
 
 1. Start a new session. All six concepts show 50.0%, interval 5.0–95.0%, and zero evidence.
 2. On the relationship question, choose **A: Every admissible heuristic is also consistent**, then **Check answer**.
-3. See an incorrect diagnosis, a **Socratic hint** and its selection reason, and guidance labeled **Authored teaching** in default local mode. Only the relationship concept changes: mean `0.3333333333333333`, interval `[0.0253, 0.7764]`, evidence count 1.
+3. See incorrect feedback, the posterior moving, and guidance labeled **Authored teaching** in default local mode. Expand **See model details** for the **Socratic hint** and its selection reason. Only the relationship concept changes: mean `0.3333333333333333`, interval `[0.0253, 0.7764]`, evidence count 1. Select **Continue** to answer the next question.
 4. On the graph with h(S)=6 and h(A)=4, choose **A: Both admissible and consistent**, then submit. The same concept becomes mean `0.5`, interval `[0.1354, 0.8646]`, count 2. A **Diagnostic probe** introduces a fresh graph.
 5. On the graph with h(S)=5 and h(A)=1, choose **A: Admissible, but not consistent**. A **Worked example** introduces the original transfer question. Choose **B: Admissible, but not consistent**, then answer the four additional transfer/reasoning questions C, B, C, B to complete the eight-question demo. The relationship concept now has eight observations; other concepts never change.
 6. Select **plain language / explain jargon**, **step-by-step**, and **concise**; click **Reset learner profile**, then **Erase evidence and restart**. The initial question/state return and the checkboxes stay selected.

@@ -286,7 +286,9 @@ describe("course activation and isolation", () => {
     fetchMock.mockResolvedValueOnce(response(returned));
     await user.click(screen.getByRole("radio", { name: "Answer for Cell biology" }));
     await user.click(screen.getByRole("button", { name: "Check answer" }));
-    const impact = await screen.findByRole("region", { name: "What changed?" });
+    await screen.findByRole("region", { name: "What changed?" });
+    await user.click(screen.getByRole("button", {name: "See model details"}));
+    const impact = screen.getByRole("region", {name: "Model comparison"});
     expect(within(impact).getByRole("row", { name: "Estimate 50.0% 33.3%" })).toBeTruthy();
     expect(within(impact).getByRole("row", { name: "Observations 0 1" })).toBeTruthy();
     expect(within(impact).getByRole("row", { name: "90% uncertainty range 5.0% – 95.0% 2.5% – 77.6%" })).toBeTruthy();

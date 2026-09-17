@@ -40,7 +40,7 @@ it('starts trusted focus from chat, continues plotted Beta state, and preserves 
   mock.mockResolvedValueOnce(response({session_id:'f1',assessment:{outcome:'correct',misconception_id:null,feedback:'Correct'},concepts:[after],decision:null,tutor:{text:'Set complete',fallback:false,teaching_source:'authored'},next_question:null,mode:'dummy',provider:'fake',trace:['assess','update','select','teach'],session_start:[before],analytics:analytics(after,true),counts:{submitted_answers:1,unique_questions_seen:1,accepted_observations:1,focus_observations:1,lifetime_evidence:5}}));
   await user.click(screen.getByRole('radio',{name:'Source response'}));await user.click(screen.getByRole('button',{name:'Check answer'}));
   await screen.findByRole('region',{name:'What changed?'});
-  const plot=within(screen.getByRole('region',{name:'Focus practice progress'})).getByRole('img');
+  const plot=within(screen.getByRole('region',{name:'What changed?'})).getByRole('img');
   expect(plot.getAttribute('aria-label')).toContain('Beta(2, 5)');expect(plot.innerHTML).not.toMatch(/NaN|Infinity/);
   expect(screen.getByText(/16.7% → 28.6%/)).toBeTruthy();
   await user.click(screen.getByRole('button',{name:'Flashcards',exact:true}));

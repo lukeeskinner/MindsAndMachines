@@ -24,6 +24,7 @@ export function AnswerModelDetails({ entry }: { entry: StudyEntry }) {
       <p className="assessed-concept">
         Assessed concept · <strong>{conceptName(question.concept_id)}</strong>
       </p>
+      <p className="impact-diagnosis">{result.assessment.feedback}</p>
       {comparable ? (
         <>
           <table className="snapshot-table">
@@ -141,6 +142,13 @@ export function AnswerModelDetails({ entry }: { entry: StudyEntry }) {
 }
 
 // Presentation of server snapshots only: no updates or policy scoring in the UI.
+export function teachingPreview(text: string): string {
+  // Keep complete, verbatim sentences (including decimals and math). The full
+  // returned explanation remains in Chatbot; this is an excerpt, not a rewrite.
+  return Array.from(new Intl.Segmenter("en", { granularity: "sentence" }).segment(text))
+    .map(part => part.segment.trim()).filter(Boolean).slice(0, 3).join(" ");
+}
+
 export function AnswerImpact({ entry }: { entry: StudyEntry }) {
   const { conceptName } = useCourseLabels();
   const id = useId();
@@ -173,7 +181,7 @@ export function NextStep({ entry }: { entry: StudyEntry }) {
   const next = entry.result.next_question;
   const reasons = entry.result.analytics?.focus_ranking.find(c => c.concept_id === next?.concept_id)?.reasons;
   return <div className="feedback-next">
-    <h3>{next ? `Next: ${next.concept_id === entry.question.concept_id ? "another " : ""}${conceptName(next.concept_id)} question` : "Next: your session recap"}</h3>
+    <h3>{next ? `Next: ${conceptName(next.concept_id).replace(/^\d+[.)]\s*/, "")}` : "Next: your session recap"}</h3>
     <p>{!next ? "Review your progress and choose what to practice next."
       : next.review ? "Review item: seen before. This answer will not add mastery evidence."
       : reasons?.some(r => r === "limited_evidence" || r === "high_uncertainty") ? "We still need more evidence on this concept."

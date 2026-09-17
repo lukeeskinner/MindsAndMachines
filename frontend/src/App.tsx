@@ -46,7 +46,7 @@ import { createSession, CourseError } from "./lib/courses";
 import { CourseBoundary, useCourseLabels } from "./components/course/CourseContext";
 import { FocusRanking } from "./components/study/FocusRanking";
 import { BetaDistributionPlot } from "./components/study/BetaDistributionPlot";
-import { AnswerImpact, AnswerModelDetails, NextStep } from "./components/study/AnswerImpact";
+import { AnswerImpact, AnswerModelDetails, NextStep, teachingPreview } from "./components/study/AnswerImpact";
 import { Flashcards } from "./components/study/Flashcards";
 import {
   TeachingSource,
@@ -60,7 +60,6 @@ import { EvidenceComparison } from "./components/study/EvidenceComparison";
 import { TeachingPreferences } from "./components/study/TeachingPreferences";
 import {
   intervalWidth,
-  activityNames,
   type StudyEntry,
 } from "./components/study/model";
 
@@ -223,6 +222,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
   );
   const complete = !!sessionId && !question;
   const review = reviewing ? latest : undefined;
+  const feedbackVisible = view === "study" && studyMode === "practice" && reviewing;
 
   async function newSession(resetLearner = false, targetConcept?: string) {
     if (requestInFlight.current) return;
@@ -331,97 +331,97 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
   }
 
   const inspector = <>
-                <section className="knowledge-panel">
-                  <div className="inspector-heading">
-                    <h2>Your understanding</h2>
-                    <span className="tag">{concepts.length} concepts</span>
-                  </div>
-                  <p className="inspector-description">
-                    Mastery estimates, with uncertainty.
-                  </p>
-                  <div className="concept-list">
-                    {concepts.length ? (
-                      concepts.map((concept) => (
-                        <button
-                          key={concept.concept_id}
-                          className={`concept-row ${selectedConcept === concept.concept_id ? "is-selected" : ""}`}
-                          onClick={() => setSelectedConcept(concept.concept_id)}
-                          aria-pressed={selectedConcept === concept.concept_id}
-                        >
-                          <span className="concept-row-title">
-                            {names[concept.concept_id] ?? concept.concept_id}
-                            {!complete && concept.concept_id === focusConcept && (
-                              <span className="concept-practice-label">
-                                Practicing
-                              </span>
-                            )}
-                          </span>
-                          <BetaDistributionPlot current={concept} compact />
-                          <small>{concept.evidence_count} observations</small>
-                          <strong>
-                            {concept.evidence_count
-                              ? pct(concept.mean)
-                              : "No evidence"}
-                          </strong>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="concept-loading" role="status">
-                        Waiting for concept estimates…
-                      </div>
-                    )}
-                  </div>
-                  {selected && (
-                    <div className="concept-detail" key={selected.concept_id}>
-                      <div className="detail-heading">
-                        <span>{shortNames[selected.concept_id] ?? selected.concept_id}</span>
-                        <span>
-                          {selected.evidence_count}{" "}
-                          {selected.evidence_count === 1
-                            ? "observation"
-                            : "observations"}
-                        </span>
-                      </div>
-                      <p className="detail-estimate">
-                        Understanding estimate:{" "}
-                        <strong>{pct(selected.mean)}</strong>
-                      </p>
-                      <BetaDistributionPlot current={selected} />
-                      <Estimate concept={selected} />
-                      <p>
-                        {selected.evidence_count === 0
-                          ? "A starting estimate. We need evidence to learn more."
-                          : "Only accepted answers on this concept supply evidence."}
-                      </p>
-                    </div>
-                  )}
-                  <Button variant="ghost" disabled={busy} onClick={() => setConfirmReset(true)}>Reset learner profile</Button>
-                  {confirmReset && <div role="group" aria-label="Confirm learner reset">
-                    <p>Erase accumulated evidence and return every concept to its starting distribution?</p>
-                    <Button disabled={busy} onClick={() => void newSession(true)}>Erase evidence and restart</Button>
-                    <Button variant="ghost" onClick={() => setConfirmReset(false)}>Keep my evidence</Button>
-                  </div>}
-                  <Disclosure title="How to read these estimates">
-                    <p>
-                      Experimental predicted success on similar unaided
-                      questions. The marker is the estimate; the shaded range is
-                      its 90% interval.
-                    </p>
-                    <p>
-                      Bayesian estimates update from accepted answer evidence.
-                      Explanations alone never increase an estimate.
-                    </p>
-                  </Disclosure>
-                </section>
-                <TeachingPreferences
-                  preferences={preferences}
-                  onChange={setPreferences}
-                  busy={busy}
-                />
-                <div className="inspector-footnote">
-                  <Info size={14} />
-                  <span>Practice space. Not a grade.</span>
-                </div>
+    <section className="knowledge-panel">
+      <div className="inspector-heading">
+        <h2>Your understanding</h2>
+        <span className="tag">{concepts.length} concepts</span>
+      </div>
+      <p className="inspector-description">
+        Mastery estimates, with uncertainty.
+      </p>
+      <div className="concept-list">
+        {concepts.length ? (
+          concepts.map((concept) => (
+            <button
+              key={concept.concept_id}
+              className={`concept-row ${selectedConcept === concept.concept_id ? "is-selected" : ""}`}
+              onClick={() => setSelectedConcept(concept.concept_id)}
+              aria-pressed={selectedConcept === concept.concept_id}
+            >
+              <span className="concept-row-title">
+                {names[concept.concept_id] ?? concept.concept_id}
+                {!complete && concept.concept_id === focusConcept && (
+                  <span className="concept-practice-label">
+                    Practicing
+                  </span>
+                )}
+              </span>
+              <BetaDistributionPlot current={concept} compact />
+              <small>{concept.evidence_count} observations</small>
+              <strong>
+                {concept.evidence_count
+                  ? pct(concept.mean)
+                  : "No evidence"}
+              </strong>
+            </button>
+          ))
+        ) : (
+          <div className="concept-loading" role="status">
+            Waiting for concept estimates…
+          </div>
+        )}
+      </div>
+      {selected && (
+        <div className="concept-detail" key={selected.concept_id}>
+          <div className="detail-heading">
+            <span>{shortNames[selected.concept_id] ?? selected.concept_id}</span>
+            <span>
+              {selected.evidence_count}{" "}
+              {selected.evidence_count === 1
+                ? "observation"
+                : "observations"}
+            </span>
+          </div>
+          <p className="detail-estimate">
+            Understanding estimate:{" "}
+            <strong>{pct(selected.mean)}</strong>
+          </p>
+          <BetaDistributionPlot current={selected} />
+          <Estimate concept={selected} />
+          <p>
+            {selected.evidence_count === 0
+              ? "A starting estimate. We need evidence to learn more."
+              : "Only accepted answers on this concept supply evidence."}
+          </p>
+        </div>
+      )}
+      <Button variant="ghost" disabled={busy} onClick={() => setConfirmReset(true)}>Reset learner profile</Button>
+      {confirmReset && <div role="group" aria-label="Confirm learner reset">
+        <p>Erase accumulated evidence and return every concept to its starting distribution?</p>
+        <Button disabled={busy} onClick={() => void newSession(true)}>Erase evidence and restart</Button>
+        <Button variant="ghost" onClick={() => setConfirmReset(false)}>Keep my evidence</Button>
+      </div>}
+      <Disclosure title="How to read these estimates">
+        <p>
+          Experimental predicted success on similar unaided
+          questions. The marker is the estimate; the shaded range is
+          its 90% interval.
+        </p>
+        <p>
+          Bayesian estimates update from accepted answer evidence.
+          Explanations alone never increase an estimate.
+        </p>
+      </Disclosure>
+    </section>
+    <TeachingPreferences
+      preferences={preferences}
+      onChange={setPreferences}
+      busy={busy}
+    />
+    <div className="inspector-footnote">
+      <Info size={14} />
+      <span>Practice space. Not a grade.</span>
+    </div>
   </>;
 
   return (
@@ -630,7 +630,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                 </Button>
               </div>
             )}
-            <div className="desk-layout" data-view={view} data-feedback={view === "study" && studyMode === "practice" && reviewing}>
+            <div className="desk-layout" data-view={view} data-feedback={feedbackVisible}>
               <div className="primary-column">
                 <TabsContent
                   value="overview"
@@ -755,7 +755,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                             : review.result.assessment.outcome === "incorrect" ? "Not quite — let’s unpack it."
                             : "Not sure yet? Let’s work through it."}
                         </h2>
-                        <p className="feedback-explanation">{review.result.assessment.feedback}</p>
+                        <p className="feedback-explanation">{teachingPreview(review.result.tutor.text)}</p>
                         <Button variant="ghost" onClick={openChatbot} className="feedback-explanation-link">
                           <MessageSquare size={16} />Read explanation<ArrowRight size={15} />
                         </Button>
@@ -1184,11 +1184,11 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                   view === "overview" ||
                   view === "chatbot" ||
                   view === "materials" ||
-                  (view === "study" && studyMode === "practice" && reviewing)
+                  feedbackVisible
                 }
                 aria-label="Concept estimates and teaching preferences"
               >
-                {inspector}
+                {!feedbackVisible && inspector}
               </aside>
             </div>
             <footer className="page-footer">

@@ -26,6 +26,7 @@ const initial = {
   question: firstQuestion,
   concepts: fixture.concepts.map((c) => ({
     ...c,
+    alpha: 1, beta: 1,
     mean: 0.5,
     interval90: { lower: 0.05, upper: 0.95 },
     evidence_count: 0,
@@ -42,6 +43,7 @@ const completed = {
     c.concept_id === "admissibility_vs_consistency"
       ? {
           ...c,
+          alpha: 2, beta: 2,
           mean: 0.5,
           interval90: { lower: 0.1354, upper: 0.8646 },
           evidence_count: 2,
@@ -114,7 +116,7 @@ describe("study desk interactions", () => {
     );
     await user.click(screen.getByRole("button", { name: "Check answer" }));
     await screen.findByRole("heading", {
-      name: "Here’s the useful distinction.",
+      name: "Not quite — let’s unpack it.",
     });
     expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/turns");
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
@@ -128,11 +130,8 @@ describe("study desk interactions", () => {
       },
     });
     expect(screen.queryByRole("radio")).toBeNull();
-    expect(
-      screen.getByRole("button", {
-        name: /Admissibility vs consistency.*33.3%/,
-      }),
-    ).toBeTruthy();
+    expect(within(screen.getByRole("region", {name: "What changed?"})).getByText("33.3%")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "See model details" }));
     expect(screen.getByText("2.5%–77.6%")).toBeTruthy();
     await user.click(
       screen.getByRole("button", { name: "Behind this response" }),
@@ -142,7 +141,7 @@ describe("study desk interactions", () => {
     expect(screen.queryByText("FakeLearner")).toBeNull();
     expect(screen.queryByText("FakePolicy")).toBeNull();
     await user.click(
-      screen.getByRole("button", { name: "Try the next question" }),
+      screen.getByRole("button", { name: "Continue" }),
     );
     await user.click(
       screen.getByRole("radio", { name: "Admissible, but not consistent." }),
@@ -151,7 +150,7 @@ describe("study desk interactions", () => {
       screen.getByRole("button", { name: "Revisit the explanation" }),
     );
     await user.click(
-      screen.getByRole("button", { name: "Try the next question" }),
+      screen.getByRole("button", { name: "Continue" }),
     );
     expect(
       (
@@ -193,7 +192,7 @@ describe("study desk interactions", () => {
       screen.getByRole("radio", { name: firstQuestion.choices[0].text }),
     );
     await user.click(screen.getByRole("button", { name: "Check answer" }));
-    await screen.findByRole("button", { name: "Try the next question" });
+    await screen.findByRole("button", { name: "Continue" });
     await user.click(screen.getByRole("tab", { name: "Concept map" }));
     const map = screen.getByRole("tabpanel", { name: "Concept map" });
     await user.click(within(map).getByRole("button", { name: /BFS/ }));
@@ -459,9 +458,12 @@ describe("adaptive evidence and trust", () => {
       screen.getByRole("radio", { name: firstQuestion.choices[0].text }),
     );
     await user.click(screen.getByRole("button", { name: "Check answer" }));
-    const impact = await screen.findByRole("region", { name: "What changed?" });
+    await screen.findByRole("region", { name: "What changed?" });
+    expect(document.activeElement).toBe(screen.getByRole("heading", {name: "Not quite — let’s unpack it."}));
+    await user.click(screen.getByRole("button", {name: "See model details"}));
+    const impact = screen.getByRole("region", {name: "Model comparison"});
     const table = within(impact).getByRole("table");
-    expect(within(impact).getByText(fixture.assessment.feedback)).toBeTruthy();
+    expect(within(screen.getByRole("tabpanel", {name: "Study desk"})).getByText(fixture.assessment.feedback)).toBeTruthy();
     expect(within(impact).getByText(fixture.decision.reason)).toBeTruthy();
     expect(within(impact).getByText("Worked example")).toBeTruthy();
     expect(within(impact).getByText(fixture.next_question.prompt)).toBeTruthy();
@@ -490,23 +492,21 @@ describe("adaptive evidence and trust", () => {
         "Authored teaching",
       ),
     ).toBeTruthy();
-    expect(document.activeElement).toBe(
-      screen.getByRole("heading", { name: "Here’s the useful distinction." }),
-    );
     const values = table.textContent;
     await user.click(screen.getByRole("switch", { name: /Keep it concise/ }));
     expect(table.textContent).toBe(values);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     await user.click(
-      screen.getByRole("button", { name: "Try the next question" }),
+      screen.getByRole("button", { name: "Continue" }),
     );
     await user.click(
       screen.getByRole("radio", { name: "Admissible, but not consistent." }),
     );
     await user.click(screen.getByRole("button", { name: "Check answer" }));
-    const finalImpact = await screen.findByRole("region", {
-      name: "What changed?",
-    });
+    await screen.findByRole("region", {name: "What changed?"});
+    expect(screen.getByRole("button", {name: "See model details"}).getAttribute("aria-expanded")).toBe("false");
+    await user.click(screen.getByRole("button", {name: "See model details"}));
+    const finalImpact = screen.getByRole("region", { name: "Model comparison" });
     expect(
       within(finalImpact).getByRole("row", { name: "Estimate 33.3% 50.0%" }),
     ).toBeTruthy();
@@ -544,7 +544,9 @@ describe("adaptive evidence and trust", () => {
     const user = await start();
     await user.click(screen.getByRole("radio", { name: "I'm not sure yet." }));
     await user.click(screen.getByRole("button", { name: "Check answer" }));
-    const impact = await screen.findByRole("region", { name: "What changed?" });
+    await screen.findByRole("region", { name: "What changed?" });
+    await user.click(screen.getByRole("button", {name: "See model details"}));
+    const impact = screen.getByRole("region", {name: "Model comparison"});
     expect(
       within(impact).getByRole("row", { name: "Observations 0 0" }),
     ).toBeTruthy();
@@ -694,13 +696,15 @@ it("moves the evidence inspector to the next concept and restores it when revisi
   const user = await start();
   await user.click(screen.getByRole("radio", {name:firstQuestion.choices[0].text}));
   await user.click(screen.getByRole("button", {name:"Check answer"}));
-  await screen.findByRole("button", {name:"Try the next question"});
+  await screen.findByRole("button", {name:"Continue"});
+  await user.click(screen.getByRole("button", {name:"See model details"}));
   const before = document.querySelector(".concept-detail")!.textContent;
-  await user.click(screen.getByRole("button", {name:"Try the next question"}));
+  await user.click(screen.getByRole("button", {name:"Continue"}));
   expect(document.querySelector(".concept-detail")!.textContent).toContain("BFS");
   expect(document.querySelector(".concept-detail")!.textContent).not.toBe(before);
   expect(screen.getByRole("button", {name:"Check answer"}).hasAttribute("disabled")).toBe(true);
   await user.click(screen.getByRole("button", {name:"Revisit the explanation"}));
+  await user.click(screen.getByRole("button", {name:"See model details"}));
   expect(document.querySelector(".concept-detail")!.textContent).toBe(before);
 });
 
