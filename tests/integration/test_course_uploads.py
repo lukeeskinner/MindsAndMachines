@@ -16,7 +16,7 @@ from backend.app.agents.provider import ProviderError, ProviderResult
 from backend.app.api import courses
 from backend.app.ingestion import IngestionError, extract_material
 from backend.app.ingestion.extraction import MAX_FILE_BYTES
-from backend.app.ingestion.pipeline import _local_proposal
+from backend.tests.ingestion.helpers import plan_for
 from backend.app import main
 from backend.app.main import create_app
 from backend.app.storage.courses import MemoryCourseRegistry
@@ -100,14 +100,16 @@ class CourseUploadTests(unittest.TestCase):
         body = preview.json()
         turn = self.client.post("/api/v1/turns", json={"session_id": body["session_id"],
                                 "question_id": body["question"]["question_id"], "answer": "a"})
-        self.assertEqual(turn.status_code, 409)
+        self.assertEqual(turn.status_code, 200, turn.text)
+        self.assertIsNotNone(turn.json()["next_question"])
+        self.provider.assert_not_called()
 
     def test_single_generation_preserves_teaching_and_rejects_invalid_teaching(self):
         materials = (extract_material(FIXTURES / "course.pptx"),)
-        proposal = _local_proposal(materials)
+        proposal = plan_for(materials)
         for valid in (True, False):
             if not valid:
-                proposal["concepts"][0]["teaching"][0]["paragraphs"] = ["Unsupported private teaching"]
+                proposal["concepts"][0]["teaching"] = ["Unsupported private teaching"]
             self.provider.reset_mock()
             self.provider.side_effect = None
             self.provider.return_value = ProviderResult(json.dumps(proposal), "bedrock", "mock", 0)
@@ -124,6 +126,28 @@ class CourseUploadTests(unittest.TestCase):
             else:
                 self.assertEqual(list(self.registry._courses.values()), [stored])
 
+    def test_fenced_bedrock_json_upload_starts_uploaded_runtime(self):
+        materials = (extract_material(FIXTURES / "course.pdf"),)
+        proposal = plan_for(materials)
+        self.provider.side_effect = None
+        self.provider.return_value = ProviderResult(
+            "```json\n" + json.dumps(proposal) + "\n```", "bedrock", "mock", 0)
+        with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+            result = self.client.post("/api/v1/courses", files=[upload("course.pdf")],
+                                      data={"title": "Uploaded PDF"})
+        self.assertEqual(result.status_code, 201, result.text)
+        course_id = result.json()["course_id"]
+        course = self.registry.get(course_id)
+        runtime = build_runtime_catalog(course)
+        session = self.client.post("/api/v1/sessions", json={"course_id": course_id})
+        self.assertEqual(session.status_code, 201, session.text)
+        self.assertEqual(session.json()["course_id"], course_id)
+        self.assertIn(session.json()["question"]["question_id"], runtime.questions)
+        self.assertEqual(result.json()["title"], "Uploaded PDF")
+        self.assertEqual({item["concept_id"] for item in result.json()["concepts"]},
+                         {item.concept_id for item in course.concepts})
+        self.provider.assert_awaited_once()
+
     def test_multi_file_and_original_names(self):
         files = [upload("Lecture notes.PDF", (FIXTURES / "course.pdf").read_bytes()),
                  upload("My slides.pptx", (FIXTURES / "course.pptx").read_bytes())]
@@ -131,6 +155,36 @@ class CourseUploadTests(unittest.TestCase):
         self.assertEqual(result.status_code, 201, result.text)
         self.assertEqual(result.json()["source_filenames"], ["Lecture notes.PDF", "My slides.pptx"])
         self.assertEqual(result.json()["title"], "Uploaded course")
+
+    def test_passage_id_generation_uploads_algorithms_and_starts_its_runtime(self):
+        name = "grad-algorithms.pptx"
+        materials = (extract_material(FIXTURES / name),)
+        self.provider.side_effect = None
+        self.provider.return_value = ProviderResult(json.dumps(plan_for(materials)), "bedrock", "mock", 0)
+        with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+            upload_result = self.client.post("/api/v1/courses", files=[upload(name)],
+                                             data={"title": "Grad Algorithms"})
+        self.assertEqual(upload_result.status_code, 201, upload_result.text)
+        public = upload_result.json()
+        course = self.registry.get(public["course_id"])
+        self.assertNotEqual(course.course_id, "demo")
+        self.assertEqual(public["title"], "Grad Algorithms")
+        self.assertEqual({c["display_name"] for c in public["concepts"]}, {c.name for c in course.concepts})
+        runtime = build_runtime_catalog(course)
+        session = self.client.post("/api/v1/sessions", json={"course_id": course.course_id})
+        self.assertEqual(session.status_code, 201, session.text)
+        self.assertEqual(session.json()["course_id"], course.course_id)
+        self.assertIn(session.json()["question"]["question_id"], runtime.questions)
+        for demo in ("Introduction to AI", "Admissibility", "consistent heuristic"):
+            self.assertNotIn(demo, upload_result.text + session.text)
+        for private in ("answer_id", "passage_id", "source_refs", "answer_key", "explanation"):
+            self.assertNotIn(f'"{private}"', upload_result.text + session.text)
+        self.provider.assert_awaited_once()
+        turn = self.client.post("/api/v1/turns", json={"session_id": session.json()["session_id"],
+                                "question_id": session.json()["question"]["question_id"], "answer": "a"})
+        self.assertEqual(turn.status_code, 200, turn.text)
+        self.assertIn(turn.json()["next_question"]["question_id"], runtime.questions)
+        self.provider.assert_awaited_once()
 
     def test_duplicate_stable_id_is_idempotent_but_replacement_conflicts(self):
         first = self.client.post("/api/v1/courses", files=[upload()])
@@ -208,6 +262,25 @@ class CourseUploadTests(unittest.TestCase):
             self.assertNotIn("Traceback", response.text)
             self.provider.assert_awaited_once()
             self.assertEqual(self.registry._courses, {})
+
+    def test_ingestion_diagnostics_identify_validation_without_logging_private_data(self):
+        for message, reason in [
+            ("Provider returned malformed JSON.", "malformed_generated_json"),
+            ("Question answer and explanation lack shared source evidence.", "answer_source_mismatch"),
+            ("Teaching contains a private rubric or correct-choice text.", "teaching_answer_leakage"),
+            ("private source prompt credential", "unclassified_validation"),
+        ]:
+            failure = IngestionError(message)
+            failure.__cause__ = ValueError("private provider output")
+            with self.subTest(reason=reason), \
+                    patch.object(courses, "process_course", AsyncMock(side_effect=failure)), \
+                    self.assertLogs("uvicorn.error.ingestion", level="WARNING") as logs:
+                response = self.client.post("/api/v1/courses", files=[upload()])
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(logs.output, [f"WARNING:uvicorn.error.ingestion:course_ingestion_failed reason={reason}"])
+            self.assertNotIn(message, response.text)
+            self.assertNotIn("private", " ".join(logs.output))
+        self.assertEqual(self.registry._courses, {})
 
     def test_failure_messages_never_echo_exception_or_materials(self):
         for failure, status in [(IngestionError("private source prompt credential"), 422),

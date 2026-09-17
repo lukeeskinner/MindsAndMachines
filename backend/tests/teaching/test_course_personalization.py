@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 from backend.app.agents.provider import ProviderError, ProviderResult
 from backend.app.ingestion import process_course
-from backend.app.ingestion.pipeline import _local_proposal
+from backend.tests.ingestion.helpers import plan_for
 from backend.app.learner.bayesian import BayesianLearner
 from backend.app.teaching.runtime_catalog import build_runtime_catalog
 from backend.app.teaching.tutor import MAX_TEXT_LENGTH, Tutor
@@ -238,7 +238,7 @@ class CoursePersonalizationTests(unittest.IsolatedAsyncioTestCase):
         self.complete.assert_not_called()
 
     async def test_one_ingestion_call_then_one_tutor_call_no_regeneration(self):
-        proposal = json.dumps(_local_proposal(self.course.materials))
+        proposal = json.dumps(plan_for(self.course.materials))
         self.complete.side_effect = [ProviderResult(proposal, "bedrock", "mock", 0),
                                     ProviderResult(json.dumps({"text": "What detail from the material would you use here?"}),
                                                    "bedrock", "mock", 0)]

@@ -185,8 +185,6 @@ describe("course onboarding", () => {
     const course = screen.getByRole("textbox", { name: "Course name" });
     await user.clear(course);
     await user.type(course, "My AI course");
-    const file = new File(["notes"], "my-notes.pdf", { type: "application/pdf" });
-    await user.upload(screen.getByLabelText("Choose course materials"), file);
     await user.click(
       screen.getByRole("button", { name: "Open practice demo" }),
     );
@@ -206,9 +204,6 @@ describe("course onboarding", () => {
       (screen.getByRole("textbox", { name: "Course name" }) as HTMLInputElement)
         .value,
     ).toBe("My AI course");
-    expect(
-      screen.getByRole("button", { name: "Remove my-notes.pdf" }),
-    ).toBeTruthy();
     await user.click(
       screen.getByRole("button", { name: "Open practice demo" }),
     );
@@ -225,10 +220,6 @@ describe("course onboarding", () => {
   it("edits workspace materials and goals locally while preserving practice and sharing setup state", async () => {
     render(<RootApp />);
     const user = await signIn();
-    await user.upload(
-      screen.getByLabelText("Choose course materials"),
-      new File(["notes"], "lecture.pdf"),
-    );
     await user.click(
       screen.getByRole("button", { name: "Open practice demo" }),
     );
@@ -238,6 +229,11 @@ describe("course onboarding", () => {
     await user.click(answer);
     await user.click(screen.getByRole("tab", { name: "Chatbot" }));
     await user.click(screen.getByRole("button", { name: "Manage materials" }));
+    // Explicitly enter the demo with no materials, then edit its local draft.
+    await user.upload(
+      screen.getByLabelText("Add materials to workspace"),
+      new File(["notes"], "lecture.pdf"),
+    );
     expect(
       screen.getByRole("button", { name: "Remove lecture.pdf" }),
     ).toBeTruthy();

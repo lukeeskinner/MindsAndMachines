@@ -16,6 +16,7 @@ from backend.app.agents.provider import ProviderError, ProviderResult
 from backend.app.ingestion import IngestionError, extract_material, process_course
 from backend.app.ingestion.extraction import P, R
 from backend.app.ingestion.pipeline import _local_proposal, validate_proposal
+from backend.tests.ingestion.helpers import plan_for
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -276,7 +277,7 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_bedrock_reuses_provider_once_and_returns_validated_course(self):
         materials = tuple(extract_material(path) for path in self.paths)
-        self.call.return_value = ProviderResult(json.dumps(_local_proposal(materials)), "bedrock", "mock", 0)
+        self.call.return_value = ProviderResult(json.dumps(plan_for(materials)), "bedrock", "mock", 0)
         with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
             result = await process_course(self.paths)
         self.call.assert_awaited_once()
@@ -284,7 +285,7 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.metadata.provider_calls, 1)
         self.assertEqual(result.materials, materials)
         payload = json.loads(self.call.call_args.args[0])
-        self.assertTrue(all(set(source) == {"chunk_id", "normalized_text"} for source in payload["sources"]))
+        self.assertTrue(all(set(source) == {"passage_id", "label", "text", "answers"} for source in payload["passages"]))
         self.assertNotIn("course.pdf", self.call.call_args.args[0])
 
     async def test_provider_errors_and_malformed_output_raise_without_retry_or_fallback(self):

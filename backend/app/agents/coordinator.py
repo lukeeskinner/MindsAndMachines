@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from copy import deepcopy
 from backend.app.agents.provider import call_budget
+from backend.app.teaching.runtime_catalog import RuntimeAvailability
 from contracts.interfaces import Assessor, Learner, Policy, Teaching
 from contracts.models import (
     Candidate, HistoryEntry, LearnerState, LearnerUpdate,
@@ -30,6 +31,7 @@ class Coordinator:
     learner: Learner
     policy: Policy
     teaching: Teaching
+    course_progression: RuntimeAvailability | None = None
 
     async def run_turn(self, request: TurnRequest, question: Question,
                        state: LearnerState, history: list[HistoryEntry],
@@ -47,6 +49,7 @@ class Coordinator:
                         candidates: list[Candidate], questions: dict[str, Question]
                         ) -> tuple[LearnerUpdate, TurnResponse]:
         trace: list[str] = []
+        bindings = {c.candidate_id: c.model_dump() for c in candidates}
         with call_budget(ASSESSOR_BUDGET_SECONDS):
             assessment = await self.assessor.assess(question, request.answer)
         trace.append("assess")
@@ -57,6 +60,17 @@ class Coordinator:
         # Snapshot policy authority before entering the replaceable teaching seam.
         decision = decision.model_copy(deep=True) if decision else None
         expected_next = decision.next_question_id if decision else None
+        if self.course_progression is not None:
+            progression = self.course_progression
+            if decision is not None:
+                if bindings.get(decision.candidate_id) != decision.model_dump(exclude={"reason"}):
+                    raise IntegrationError("Policy selected an ineligible course candidate")
+            elif not progression.concept_exhausted:
+                raise IntegrationError("Policy stopped before the concept was exhausted")
+            else:
+                expected_next = progression.next_concept_question_id
+            if (expected_next is None) != progression.course_exhausted:
+                raise IntegrationError("Course completion does not match question exhaustion")
         if expected_next is not None and expected_next not in questions:
             raise IntegrationError("Policy selected an unknown next question")
         next_question = questions[expected_next].public() if expected_next is not None else None

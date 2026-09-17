@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from fastapi import APIRouter, Body, Header, HTTPException
 from backend.app.agents.coordinator import Coordinator, IntegrationError, TurnTimeoutError
 from backend.app.auth.cognito import AuthError, cognito_enabled, verify_id_token
@@ -5,12 +6,23 @@ from backend.app.storage.dynamo import DynamoStore
 from backend.app.storage.memory import MemoryStore, Session
 from backend.app.storage.courses import MemoryCourseRegistry
 from backend.app.teaching.catalog import Catalog
+from backend.app.ingestion.models import IngestionError
+from backend.app.teaching.runtime_catalog import RuntimeAvailability, RuntimeCatalog, build_runtime_catalog
 from contracts.models import HistoryEntry, SessionRequest, SessionResponse, TurnRequest, TurnResponse
 
 
 def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catalog: Catalog,
-               course_registry: MemoryCourseRegistry) -> APIRouter:
+               course_registry: MemoryCourseRegistry,
+               course_coordinator: Callable[[RuntimeCatalog, RuntimeAvailability], Coordinator]) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
+
+    def course_runtime(course_id: str) -> RuntimeCatalog:
+        try:
+            return build_runtime_catalog(course_registry.get(course_id))
+        except KeyError:
+            raise HTTPException(404, "Course not found. Upload the materials again.") from None
+        except IngestionError:
+            raise HTTPException(422, "Course learning content is invalid. Upload the materials again.") from None
 
     @router.post("/sessions", response_model=SessionResponse, status_code=201)
     async def new_session(request: SessionRequest = Body(default=SessionRequest()),
@@ -25,12 +37,9 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
             concept_ids = catalog.concept_ids
             question = catalog.question(catalog.first_question_id)
         else:
-            try:
-                course_catalog = course_registry.catalog(request.course_id)
-            except KeyError:
-                raise HTTPException(404, "Course not found.") from None
+            course_catalog = course_runtime(request.course_id)
             concept_ids = course_catalog.concept_ids
-            question = course_catalog.question(course_catalog.first_question_id).question
+            question = course_catalog.question(course_catalog.first_question_id)
         initial = coordinator.learner.initial_state(concept_ids)
         session_id = store.new_session(question.question_id, initial.state, user_id,
                                        course_id=request.course_id)
@@ -44,19 +53,36 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
             session = store.load_session(request.session_id)
         except KeyError:
             raise HTTPException(404, "Session not found. Start a new session.") from None
-        if session.course_id is not None:
-            # Foundation sessions are previews only. Never grade an uploaded item
-            # using the demo assessor, candidates or Tutor.
-            raise HTTPException(409, "Course learning is not enabled yet.")
+        runtime = course_runtime(session.course_id) if session.course_id is not None else catalog
         if request.question_id != session.question_id:
             raise HTTPException(400, "Please answer the current question or start a new session.")
-        question = catalog.question(request.question_id)
+        try:
+            question = runtime.question(request.question_id)
+        except KeyError:
+            raise HTTPException(500, "Learning activity configuration error. Start a new session.") from None
         if request.answer not in {choice.id for choice in question.choices}:
             raise HTTPException(400, "Choose one of the listed answers.")
         try:
-            update, response = await coordinator.run_turn(
+            active_coordinator = coordinator
+            candidates = runtime.candidates
+            if isinstance(runtime, RuntimeCatalog):
+                if (set(session.learner_state.skills) != set(runtime.concept_ids)
+                        or request.question_id in {entry.question_id for entry in session.history}):
+                    raise IntegrationError("Course session state does not match its current activity")
+                try:
+                    availability = runtime.eligible_candidates(
+                        current_question_id=request.question_id,
+                        consumed_question_ids=[entry.question_id for entry in session.history],
+                        consumed_candidate_ids=[entry.candidate_id for entry in session.history
+                                                if entry.candidate_id is not None],
+                    )
+                except ValueError as exc:
+                    raise IntegrationError("Course history contains foreign IDs") from exc
+                candidates = list(availability.candidates)
+                active_coordinator = course_coordinator(runtime, availability)
+            update, response = await active_coordinator.run_turn(
                 request, question, session.learner_state, session.history,
-                catalog.candidates, catalog.questions,
+                candidates, runtime.questions,
             )
         except TurnTimeoutError:
             raise HTTPException(504, "Learning turn timed out. Start a new session.") from None

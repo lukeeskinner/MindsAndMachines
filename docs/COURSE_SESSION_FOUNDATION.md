@@ -1,5 +1,8 @@
 # Course/session integration foundation
 
+Historical foundation handoff: its preview-only 409 guard is superseded by the
+[uploaded-course runtime integration](UPLOADED_COURSE_INTEGRATION.md).
+
 This slice establishes private artifact ownership and preview session creation.
 It does not activate uploaded-course learning. The default demo, FakeAssessor,
 BayesianLearner, AdaptivePolicy, Coordinator and Tutor remain unchanged.

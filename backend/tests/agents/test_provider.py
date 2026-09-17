@@ -1,6 +1,8 @@
 import asyncio
+import json
 import os
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -54,6 +56,79 @@ class BedrockProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(config.connect_timeout, 1)
         self.assertEqual(config.read_timeout, 1)
         self.client.close.assert_called_once()
+
+    async def test_structured_response_uses_one_forced_tool_and_preserves_json_strings(self):
+        schema = {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"]}
+        payload = {"prompt": 'Explain "f(x)" with \\ notation.\nA second line.'}
+        self.client.converse.return_value = {"stopReason": "tool_use", "output": {"message": {"content": [
+            {"text": "Ignored commentary; never parsed as JSON."},
+            {"toolUse": {"toolUseId": "mock", "name": "submit_structured_response", "input": payload}},
+        ]}}}
+        result = await complete("course", purpose="course_ingestion", response_schema=schema)
+        self.assertEqual(json.loads(result.text), payload)
+        self.client.converse.assert_called_once()
+        config = self.client.converse.call_args.kwargs["toolConfig"]
+        self.assertEqual(self.client.converse.call_args.kwargs["inferenceConfig"]["temperature"], 0)
+        self.assertEqual(config["toolChoice"], {"tool": {"name": "submit_structured_response"}})
+        self.assertEqual(config["tools"][0]["toolSpec"]["inputSchema"], {"json": schema})
+        self.client.close.assert_called_once()
+
+    async def test_missing_multiple_wrong_or_truncated_structured_responses_fail_without_retry(self):
+        valid = {"toolUse": {"name": "submit_structured_response", "input": {"concepts": []}}}
+        for stop, blocks in (
+            ("end_turn", [{"text": '{"concepts":[]}'}]),
+            ("tool_use", [valid, valid]),
+            ("tool_use", [{"toolUse": {"name": "other_tool", "input": {}}}]),
+            ("tool_use", [{"toolUse": {"name": "submit_structured_response", "input": "not an object"}}]),
+            ("max_tokens", [valid]),
+        ):
+            self.client.converse.reset_mock()
+            self.client.converse.return_value = {"stopReason": stop, "output": {"message": {"content": blocks}}}
+            with self.subTest(stop=stop, blocks=len(blocks)), self.assertRaises(ProviderError):
+                await complete("course", purpose="course_ingestion", response_schema={"type": "object"})
+            self.client.converse.assert_called_once()
+
+    async def test_ingestion_has_its_own_bounded_timeout_and_does_not_change_interactive_calls(self):
+        with patch.dict(os.environ, {"BEDROCK_INGESTION_TIMEOUT_SECONDS": "60"}):
+            with self.assertLogs("uvicorn.error.provider", level="INFO") as logs:
+                await complete("course", purpose="course_ingestion", max_tokens=6000)
+            config = self.factory.call_args.kwargs["config"]
+            self.assertEqual(config.read_timeout, 60)
+            self.assertEqual(config.connect_timeout, 5)
+            self.assertEqual(config.retries, {"total_max_attempts": 1})
+            self.assertIn("timeout_seconds='60' purpose=course_ingestion", "\n".join(logs.output))
+            await complete("tutor")
+            self.assertEqual(self.factory.call_args.kwargs["config"].read_timeout, 1)
+
+    async def test_course_can_finish_after_interactive_deadline_without_retry(self):
+        def slow_response(**kwargs):
+            time.sleep(0.05)
+            return {"output": {"message": {"content": [{"text": "course"}]}}}
+
+        self.client.converse.side_effect = slow_response
+        with patch.dict(os.environ, {"BEDROCK_TIMEOUT_SECONDS": "0.01",
+                                    "BEDROCK_INGESTION_TIMEOUT_SECONDS": "0.5"}):
+            result = await complete("course", purpose="course_ingestion")
+            self.assertEqual(result.text, "course")
+            self.client.converse.assert_called_once()
+            with self.assertRaisesRegex(ProviderError, "timed out"):
+                await complete("interactive")
+
+    async def test_ingestion_configuration_is_bounded_and_respects_parent_deadline(self):
+        for value in ("0", "-1", "nan", "inf", "91", "bad"):
+            with self.subTest(value=value), patch.dict(os.environ, {"BEDROCK_INGESTION_TIMEOUT_SECONDS": value}):
+                with self.assertRaises(ProviderError):
+                    await complete("course", purpose="course_ingestion")
+        self.factory.assert_not_called()
+        with patch.dict(os.environ, {"BEDROCK_INGESTION_TIMEOUT_SECONDS": "90"}), call_budget(0.5):
+            await complete("course", purpose="course_ingestion")
+            self.assertLessEqual(self.factory.call_args.kwargs["config"].read_timeout, 0.5)
+
+    async def test_ingestion_uses_sixty_seconds_when_unconfigured(self):
+        with patch.dict(os.environ):
+            os.environ.pop("BEDROCK_INGESTION_TIMEOUT_SECONDS", None)
+            await complete("course", purpose="course_ingestion")
+        self.assertEqual(self.factory.call_args.kwargs["config"].read_timeout, 60)
 
     async def test_blocked_sdk_does_not_block_loop_and_times_out(self):
         started = threading.Event()

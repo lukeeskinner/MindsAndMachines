@@ -4,6 +4,7 @@ Teaching calls this instead of importing provider SDKs directly. Fake mode stays
 local; Bedrock runs in a worker thread with a bounded caller deadline.
 """
 import asyncio
+import json
 import math
 import logging
 import os
@@ -11,10 +12,16 @@ import time
 from dataclasses import dataclass
 from contextlib import contextmanager
 from contextvars import ContextVar
+from typing import Literal
 
 
 logger = logging.getLogger("uvicorn.error.provider")
 _deadline: ContextVar[float | None] = ContextVar("provider_deadline", default=None)
+ProviderPurpose = Literal["interactive", "course_ingestion"]
+_TIMEOUT_SETTINGS = {
+    "interactive": ("BEDROCK_TIMEOUT_SECONDS", "12", 15),
+    "course_ingestion": ("BEDROCK_INGESTION_TIMEOUT_SECONDS", "60", 90),
+}
 
 
 @contextmanager
@@ -29,13 +36,14 @@ def call_budget(seconds: float):
         _deadline.reset(token)
 
 
-def log_configuration(event: str) -> None:
+def log_configuration(event: str, *, purpose: ProviderPurpose = "interactive") -> None:
     # Only these non-secret configuration fields are diagnostic output. Never
     # dump the environment, SDK exceptions, request/response bodies or headers.
-    logger.info("%s pid=%s configured_provider=%r configured_model=%r region=%r timeout_seconds=%r",
+    setting, default, _ = _TIMEOUT_SETTINGS[purpose]
+    logger.info("%s pid=%s configured_provider=%r configured_model=%r region=%r timeout_seconds=%r purpose=%s",
                 event, os.getpid(), os.environ.get("MODEL_PROVIDER", "fake"),
                 os.environ.get("BEDROCK_MODEL_ID"), os.environ.get("AWS_REGION"),
-                os.environ.get("BEDROCK_TIMEOUT_SECONDS", "12"))
+                os.environ.get(setting, default), purpose)
 
 
 @dataclass
@@ -51,13 +59,18 @@ class ProviderError(RuntimeError):
     silently retry against a different provider (AWS.md)."""
 
 
-async def complete(prompt: str, *, system: str | None = None, max_tokens: int = 512) -> ProviderResult:
+async def complete(prompt: str, *, system: str | None = None, max_tokens: int = 512,
+                   purpose: ProviderPurpose = "interactive",
+                   response_schema: dict | None = None) -> ProviderResult:
+    if purpose not in _TIMEOUT_SETTINGS:
+        raise ProviderError("Unsupported provider call purpose")
     provider = os.environ.get("MODEL_PROVIDER", "fake")
     if provider == "fake":
         return _complete_fake(prompt)
     if provider == "bedrock":
-        log_configuration("provider_attempt")
-        return await _complete_bedrock(prompt, system=system, max_tokens=max_tokens)
+        log_configuration("provider_attempt", purpose=purpose)
+        return await _complete_bedrock(prompt, system=system, max_tokens=max_tokens, purpose=purpose,
+                                       response_schema=response_schema)
     raise ProviderError(f"Unsupported MODEL_PROVIDER: {provider!r}")
 
 
@@ -65,16 +78,18 @@ def _complete_fake(prompt: str) -> ProviderResult:
     return ProviderResult(text=f"[fake provider echo] {prompt}", provider="fake", model="fake", latency_ms=0.0)
 
 
-async def _complete_bedrock(prompt: str, *, system: str | None, max_tokens: int) -> ProviderResult:
+async def _complete_bedrock(prompt: str, *, system: str | None, max_tokens: int,
+                            purpose: ProviderPurpose, response_schema: dict | None = None) -> ProviderResult:
+    setting, default, maximum = _TIMEOUT_SETTINGS[purpose]
     try:
-        timeout = float(os.environ.get("BEDROCK_TIMEOUT_SECONDS", "12"))
-        if not math.isfinite(timeout) or not 0 < timeout <= 15:
-            raise ValueError("timeout outside interactive budget")
+        timeout = float(os.environ.get(setting, default))
+        if not math.isfinite(timeout) or not 0 < timeout <= maximum:
+            raise ValueError("timeout outside configured purpose budget")
         region = os.environ["AWS_REGION"]
         model_id = os.environ["BEDROCK_MODEL_ID"]
     except (ValueError, KeyError) as exc:
         logger.warning("provider_failed reason=configuration_error")
-        raise ProviderError("Bedrock requires region, model and a timeout in (0, 15] seconds") from exc
+        raise ProviderError(f"Bedrock requires region, model and {setting} in (0, {maximum}] seconds") from exc
     try:
         deadline = _deadline.get()
         if deadline is not None:
@@ -83,7 +98,7 @@ async def _complete_bedrock(prompt: str, *, system: str | None, max_tokens: int)
             raise TimeoutError("Provider budget exhausted")
         result = await asyncio.wait_for(asyncio.to_thread(
             _converse, prompt, system=system, max_tokens=max_tokens,
-            region=region, model_id=model_id, timeout=timeout,
+            region=region, model_id=model_id, timeout=timeout, response_schema=response_schema,
         ), timeout=timeout)
         logger.info("provider_returned provider=bedrock latency_ms=%.1f", result.latency_ms)
         return result
@@ -112,7 +127,7 @@ async def _complete_bedrock(prompt: str, *, system: str | None, max_tokens: int)
 
 
 def _converse(prompt: str, *, system: str | None, max_tokens: int,
-              region: str, model_id: str, timeout: float) -> ProviderResult:
+              region: str, model_id: str, timeout: float, response_schema: dict | None = None) -> ProviderResult:
     import boto3  # local import: fake mode never needs boto3 installed
     from botocore.config import Config
 
@@ -128,6 +143,16 @@ def _converse(prompt: str, *, system: str | None, max_tokens: int,
     }
     if system:
         kwargs["system"] = [{"text": system}]
+    if response_schema is not None:
+        kwargs["inferenceConfig"]["temperature"] = 0
+        # This tool is an output envelope only. No tool is executed and no
+        # follow-up inference is made. The caller still validates its contents.
+        kwargs["toolConfig"] = {
+            "tools": [{"toolSpec": {"name": "submit_structured_response",
+                       "description": "Submit the requested structured response.",
+                       "inputSchema": {"json": response_schema}}}],
+            "toolChoice": {"tool": {"name": "submit_structured_response"}},
+        }
     try:
         logger.info("bedrock_converse_started")
         response = client.converse(**kwargs)
@@ -136,7 +161,16 @@ def _converse(prompt: str, *, system: str | None, max_tokens: int,
                          "guardrail_intervened", "content_filtered"}
         logger.info("bedrock_response_received stop_reason=%s",
                     stop_reason if isinstance(stop_reason, str) and stop_reason in allowed_stops else "unknown")
-        text = response["output"]["message"]["content"][0]["text"]
+        content = response["output"]["message"]["content"]
+        if response_schema is not None:
+            uses = [block["toolUse"] for block in content if "toolUse" in block]
+            if (stop_reason != "tool_use" or len(uses) != 1
+                    or uses[0].get("name") != "submit_structured_response"
+                    or not isinstance(uses[0].get("input"), dict)):
+                raise ValueError("Expected one structured response")
+            text = json.dumps(uses[0]["input"], allow_nan=False)
+        else:
+            text = content[0]["text"]
         if not isinstance(text, str) or not text.strip():
             raise ValueError("Empty Bedrock text")
     finally:

@@ -2,6 +2,8 @@
 
 **G2 assessor runtime integration:** the adaptive demo uses RealAssessor, BayesianLearner, AdaptivePolicy and the existing Tutor. Answer-key grading is authoritative. Local assessment and teaching are deterministic; explicit Bedrock configuration enables bounded diagnosis and validated teaching prose with reviewed fallback. This scoped increment does not authorize deployment or further G2 work.
 
+**Uploaded-course integration:** PDF/PPTX uploads can now start course-bound learning sessions through those same seams, using course-specific questions and stored teaching. Concept progression continues until the uploaded study bank is exhausted. See the [integration handoff and manual Grad Algorithms walkthrough](docs/UPLOADED_COURSE_INTEGRATION.md).
+
 ## Run locally
 
 Prerequisites: macOS/Linux, Python 3.12 or 3.13, Node.js 22.12+ (tested with Node 24), npm, and make. Windows users can use WSL; native Windows execution is not verified.
@@ -58,9 +60,15 @@ From a developer shell with the workshop's temporary AWS credentials already exp
 MODEL_PROVIDER=bedrock AWS_REGION=us-east-1 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0 BEDROCK_TIMEOUT_SECONDS=12 make dev
 ```
 
-Open [the learning lab](http://127.0.0.1:5173) and follow the first-answer walkthrough. Accepted Bedrock prose shows **AI-generated teaching**; provider timeout/error or rejected output shows **Reviewed fallback**, with the same policy-selected next question. Completion is authored even in Bedrock mode. `MODEL_PROVIDER=fake` (the default) or `local` never invokes the provider through Assessment or Tutor. Materials remain local setup and are not sent to Tutor.
+Open [the learning lab](http://127.0.0.1:5173) and follow the first-answer walkthrough. Accepted Bedrock prose shows **AI-generated teaching**; provider timeout/error or rejected output shows **Reviewed fallback**, with the same policy-selected next question. Completion is authored even in Bedrock mode. `MODEL_PROVIDER=fake` (the default) or `local` never invokes the provider through Assessment or Tutor. Selected files remain local until **Upload course**; uploaded content is processed by the backend, and course Tutor personalization receives the selected artifact's display-safe grounding.
 
-Each turn caps assessment provider work at 4 seconds and Tutor provider work at 12 seconds, within an 18-second coordinator deadline. The browser keeps its 20-second request timeout. `BEDROCK_TIMEOUT_SECONDS` defaults to 12 and accepts values above zero up to 15; each call uses the smallest configured, stage and remaining turn budget. The two sequential provider waits total at most 16 seconds, reserving 2 seconds for local turn work and 2 seconds for HTTP overhead. If the total coordinator deadline expires, the API returns a controlled 504 before saving the turn. This bounds asynchronous turn work, not external storage/network delays or synchronous event-loop stalls. A timed-out SDK thread can finish later, but its result is ignored and cannot update the session. SDK socket deadlines are also set and retries are disabled. No provider switching or whole-turn retries occur. Do not store credentials in repository files. `make check` and `make smoke` use mocked/local providers and do not test live AWS access.
+Each turn caps assessment provider work at 4 seconds and Tutor provider work at 12 seconds, within an 18-second coordinator deadline. The browser keeps its 20-second request timeout. `BEDROCK_TIMEOUT_SECONDS` defaults to 12 and accepts values above zero up to 15; each interactive call uses the smallest configured, stage and remaining turn budget. The two sequential provider waits total at most 16 seconds, reserving 2 seconds for local turn work and 2 seconds for HTTP overhead. If the total coordinator deadline expires, the API returns a controlled 504 before saving the turn. This bounds asynchronous turn work, not external storage/network delays or synchronous event-loop stalls. A timed-out SDK thread can finish later, but its result is ignored and cannot update the session. SDK socket deadlines are also set and retries are disabled. No provider switching or whole-turn retries occur. Do not store credentials in repository files. `make check` and `make smoke` use mocked/local providers and do not test live AWS access.
+
+Course generation is a larger, separate upload request. Its single provider call
+uses `BEDROCK_INGESTION_TIMEOUT_SECONDS`, default 60 seconds, allowed above zero up
+to 90. The upload browser timeout stays 120 seconds. This does not extend tutoring
+deadlines or add retries. The provider attempt log includes
+`timeout_seconds='60' purpose=course_ingestion` with the default configuration.
 
 For a live failure diagnosis, stop the existing dev launcher with Ctrl-C and run
 the command above again (the backend does not hot-reload). The backend terminal
@@ -74,6 +82,14 @@ an allowlisted rule description. These logs omit credentials, headers, raw
 exceptions, prompts and generated text. Share only these diagnostic lines.
 The public `dummy/fake` values describe authored fallback, so they alone cannot
 establish whether a Bedrock attempt occurred.
+
+If course upload returns a validation failure, the backend now logs
+`course_ingestion_failed reason=...` with a fixed diagnostic code, such as
+`malformed_generated_json`, `answer_source_mismatch`, or `teaching_answer_leakage`.
+Unknown errors log `unclassified_validation`; exception text, extracted material
+and provider output are never included. Restart the dev launcher after backend
+edits, retry once, and use this code to diagnose the rejected rule before changing
+validation. A generic upload error alone does not establish that the PDF is bad.
 
 ## Runtime boundaries
 

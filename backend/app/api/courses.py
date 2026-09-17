@@ -1,5 +1,6 @@
 """Multipart ingestion router; mount with the same registry as session routes."""
 import asyncio
+import logging
 from pathlib import Path
 import tempfile
 
@@ -16,6 +17,51 @@ from backend.app.ingestion.extraction import MAX_FILE_BYTES
 from backend.app.ingestion.pipeline import MAX_FILES
 from backend.app.storage.courses import MemoryCourseRegistry
 from contracts.models import PublicCourse
+
+
+logger = logging.getLogger("uvicorn.error.ingestion")
+# Only fixed codes reach logs. Never log exception text, source content or a
+# provider response; validation exceptions may retain private materials.
+_FAILURE_REASONS = {
+    "Generated JSON has missing or unexpected fields.": "generated_schema",
+    "Generated text is empty, invalid, or too long.": "generated_text_bounds",
+    "Generated list has an invalid type or size.": "generated_list_bounds",
+    "Generated JSON contains duplicate object keys.": "duplicate_json_key",
+    "Generated JSON contains a non-JSON numeric constant.": "invalid_json_number",
+    "Generated JSON exceeds the output limit.": "generated_output_limit",
+    "Provider returned malformed JSON.": "malformed_generated_json",
+    "Unknown or duplicate generated passage ID.": "invalid_passage_id",
+    "Generated answer ID does not belong to its passage.": "invalid_answer_reference",
+    "No usable source passages for question generation.": "no_usable_passages",
+    "Generated question prompt discloses its answer.": "question_answer_leakage",
+    "Generated plan concept list has an invalid type or size.": "invalid_plan_concept_count",
+    "Generated plan question list has an invalid type or size.": "invalid_plan_question_count",
+    "Generated plan distractor list has an invalid type or size.": "invalid_plan_distractor_count",
+    "Unknown source reference or unsupported evidence quote.": "unsupported_evidence_quote",
+    "Duplicate source reference.": "duplicate_source_reference",
+    "Duplicate concept.": "duplicate_concept",
+    "Concept name and summary must be supported by the same source quote.": "concept_source_mismatch",
+    "Duplicate concept ID.": "duplicate_concept_id",
+    "Question choices or answer key are invalid.": "invalid_question_choices",
+    "Duplicate question prompt.": "duplicate_question_prompt",
+    "Question does not identify its concept.": "question_concept_mismatch",
+    "Question evidence must intersect its concept's sources.": "question_source_mismatch",
+    "Question answer and explanation lack shared source evidence.": "answer_source_mismatch",
+    "Multiple choices appear in source evidence; extractive question is ambiguous.": "ambiguous_question",
+    "Duplicate question ID.": "duplicate_question_id",
+    "Expected exactly one teaching item per intervention kind.": "missing_teaching_kind",
+    "Invalid teaching identity, concept or kind.": "invalid_teaching_identity",
+    "Invalid teaching paragraphs.": "invalid_teaching_paragraphs",
+    "Probe or hint exceeds the teaching budget.": "teaching_length_limit",
+    "Teaching lacks valid concept source references.": "teaching_source_mismatch",
+    "Teaching contains a private rubric or correct-choice text.": "teaching_answer_leakage",
+    "Teaching contains control instructions or answer disclosure.": "teaching_control_or_answer",
+    "Teaching exposes internal identifiers.": "teaching_internal_identifiers",
+    "Teaching prose is not supported by cited text or a process template.": "unsupported_teaching_prose",
+    "Bedrock context exceeds 24,000 characters; split the material before processing.": "source_context_limit",
+    "No extractable text; scanned pages/images need OCR outside this MVP.": "no_extractable_text",
+    "Unexpected provider response; course generation rejected.": "unexpected_provider",
+}
 
 
 class UploadTooLarge(MultiPartException):
@@ -100,11 +146,15 @@ def _ingestion_error(exc):
     # Never serialize exception text, attached materials or chained exceptions.
     if isinstance(exc.__cause__, ProviderError):
         if isinstance(exc.__cause__.__cause__, TimeoutError):
+            logger.warning("course_ingestion_failed reason=provider_timeout")
             return HTTPException(504, "Course generation timed out.")
+        logger.warning("course_ingestion_failed reason=provider_failure")
         return HTTPException(502, "Course generation provider failed.")
     if str(exc) == ("PDF extraction requires existing Poppler pdfinfo and pdftotext "
                     "on PATH; nothing was installed."):
+        logger.warning("course_ingestion_failed reason=pdf_extractor_unavailable")
         return HTTPException(503, "PDF extraction is unavailable; Poppler is required on the server.")
+    logger.warning("course_ingestion_failed reason=%s", _FAILURE_REASONS.get(str(exc), "unclassified_validation"))
     return HTTPException(422, "Course ingestion failed validation. Check the source files and try again.")
 
 

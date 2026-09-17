@@ -178,6 +178,79 @@ describe("truthful course upload", () => {
 });
 
 describe("course activation and isolation", () => {
+  it("activates an already uploaded course through the main start button and replaces an existing demo session", async () => {
+    window.sessionStorage.setItem("minds-machines-auth", JSON.stringify({ email: "test@example.com", signedInAt: "2026-09-16" }));
+    const user = userEvent.setup();
+    render(<RootApp />);
+    await user.click(screen.getByRole("button", { name: "Open practice demo" }));
+    await screen.findByRole("radio", { name: demo.question.choices[0].text });
+    await user.click(screen.getByRole("button", { name: "Course setup" }));
+    await user.upload(screen.getByLabelText("Choose course materials"), pdf());
+    fetchMock.mockResolvedValueOnce(response(biology, 201));
+    await user.click(screen.getByRole("button", { name: "Upload course" }));
+    await user.click(await screen.findByRole("button", { name: "Start uploaded course" }));
+    await screen.findByRole("radio", { name: "Answer for Cell biology" });
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(["/api/v1/sessions", "/api/v1/courses", "/api/v1/sessions"]);
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ course_id: biology.course_id });
+    expect(document.body.textContent).not.toMatch(/Introduction to AI|Search & heuristics/);
+    expect(screen.queryByRole("radio", { name: demo.question.choices[0].text })).toBeNull();
+  });
+
+  it("stays in setup after upload failure and retries without creating a demo session", async () => {
+    window.sessionStorage.setItem("minds-machines-auth", JSON.stringify({ email: "test@example.com", signedInAt: "2026-09-16" }));
+    const user = userEvent.setup();
+    render(<RootApp />);
+    await user.upload(screen.getByLabelText("Choose course materials"), pdf());
+    fetchMock.mockResolvedValueOnce(response({ detail: "private failure" }, 503));
+    await user.click(screen.getByRole("button", { name: "Upload and start course" }));
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("tab", { name: "Study desk" })).toBeNull();
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(["/api/v1/courses"]);
+    fetchMock.mockResolvedValueOnce(response(biology, 201));
+    await user.click(screen.getByRole("button", { name: "Upload and start course" }));
+    await screen.findByRole("radio", { name: "Answer for Cell biology" });
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(["/api/v1/courses", "/api/v1/courses", "/api/v1/sessions"]);
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ course_id: biology.course_id });
+  });
+
+  it.each([false, true])("starts selected Grad Algorithms materials from onboarding (review=%s), never a demo session", async review => {
+    const algorithms: PublicCourse = {
+      course_id: "course_grad_algorithms", title: "Grad Algorithms",
+      concepts: [{ concept_id: "dynamic_programming", display_name: "Dynamic programming" }],
+      source_filenames: ["grad-algorithms.pptx"], question_count: 2,
+    };
+    window.sessionStorage.setItem("minds-machines-auth", JSON.stringify({ email: "test@example.com", signedInAt: "2026-09-16" }));
+    const uploaded = deferred<ReturnType<typeof response>>();
+    fetchMock.mockImplementation(async (path, options) => {
+      if (path === "/api/v1/courses") return uploaded.promise;
+      return response(JSON.parse(options.body).course_id === algorithms.course_id ? session(algorithms) : demo);
+    });
+    const user = userEvent.setup();
+    render(<RootApp />);
+    await user.clear(screen.getByRole("textbox", { name: "Course name" }));
+    await user.type(screen.getByRole("textbox", { name: "Course name" }), algorithms.title);
+    await user.upload(screen.getByLabelText("Choose course materials"), new File(["lecture"], "grad-algorithms.pptx"));
+    if (review) {
+      await user.click(screen.getByRole("radio", { name: /Build understanding/ }));
+      await user.click(screen.getByRole("button", { name: "Review my setup" }));
+    }
+    const start = screen.getAllByRole("button", { name: /^(Open practice demo|Upload and start course)$/ }).at(-1)!;
+    await user.click(start);
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(["/api/v1/courses"]);
+    expect(fetchMock.mock.calls[0][1].body.get("title")).toBe("Grad Algorithms");
+    expect((start as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("tabpanel", { name: "Study desk" })).toBeNull();
+    await act(async () => uploaded.resolve(response(algorithms, 201)));
+    await screen.findByRole("radio", { name: "Answer for Grad Algorithms" });
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(["/api/v1/courses", "/api/v1/sessions"]);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ course_id: algorithms.course_id });
+    expect(document.body.textContent).toContain("Dynamic programming");
+    expect(document.body.textContent).not.toMatch(/Introduction to AI|Search & heuristics|Admissibility|admissible|consistent heuristic/);
+    await user.click(screen.getByRole("button", { name: "New session / reset" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ course_id: algorithms.course_id });
+  });
+
   it("sends course_id, renders dynamic labels everywhere, and resets within the course while preserving preferences", async () => {
     const user = await materials(readyAdapter());
     await uploadAndActivate(user);
@@ -247,13 +320,13 @@ describe("course activation and isolation", () => {
     expect(screen.getByRole("radio", { name: "Answer for Cell biology" }).closest("fieldset")?.disabled).toBe(true);
   });
 
-  it("shows the current backend preview-only response without grading or leaking errors", async () => {
+  it("handles a course disappearing during a turn without grading or leaking errors", async () => {
     const user = await materials(readyAdapter());
     await uploadAndActivate(user);
-    fetchMock.mockResolvedValueOnce(response({ detail: "internal implementation" }, 409));
+    fetchMock.mockResolvedValueOnce(response({ detail: "internal implementation" }, 404));
     await user.click(screen.getByRole("radio", { name: "Answer for Cell biology" }));
     await user.click(screen.getByRole("button", { name: "Check answer" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("Your course has not been graded");
+    expect((await screen.findByRole("alert")).textContent).toContain("course is no longer available");
     expect(screen.queryByRole("region", { name: "What changed?" })).toBeNull();
     expect(document.body.textContent).not.toContain("internal implementation");
   });

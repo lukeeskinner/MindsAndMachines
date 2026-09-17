@@ -1,4 +1,4 @@
-"""Session ownership is enabled; uploaded-course learning remains disabled."""
+"""Course-bound sessions and safe resolution of their private runtime artifacts."""
 import asyncio
 import os
 from pathlib import Path
@@ -77,17 +77,19 @@ class CourseSessionTests(unittest.TestCase):
             self.assertEqual(turn.status_code, 200, turn.text)
             self.assertIsNone(self.store.load_session(session["session_id"]).course_id)
 
-    def test_course_turn_is_blocked_before_coordinator_or_demo_lookup(self):
+    def test_missing_course_is_rejected_before_coordinator_or_demo_lookup(self):
         session = self.create(self.course.course_id)
         stored = self.store.load_session(session["session_id"])
         before = stored.learner_state.model_dump()
+        # Persistent sessions may survive a process-local course registry restart.
+        self.registry._courses.clear()
         with patch.object(Coordinator, "run_turn", new_callable=AsyncMock) as run_turn, \
                 patch.object(Catalog, "question", side_effect=AssertionError("Demo lookup")):
             for question_id in (stored.question_id, "relationship-q01"):
                 result = self.client.post("/api/v1/turns", json={"session_id": session["session_id"],
                     "question_id": question_id, "answer": "a"})
-                self.assertEqual(result.status_code, 409)
-                self.assertEqual(result.json(), {"detail": "Course learning is not enabled yet."})
+                self.assertEqual(result.status_code, 404)
+                self.assertEqual(result.json(), {"detail": "Course not found. Upload the materials again."})
             run_turn.assert_not_called()
         self.assertEqual(stored.learner_state.model_dump(), before)
         self.assertEqual(stored.history, [])

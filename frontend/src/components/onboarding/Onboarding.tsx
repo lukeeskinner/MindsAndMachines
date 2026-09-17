@@ -52,6 +52,26 @@ export function Onboarding({
   const course = useCourse();
   const selectedCourse = course?.selectedCourse;
   const uploaded = course && course.upload.status !== "idle";
+  const processing = course?.upload.status === "processing";
+  const readyCourse = course?.upload.status === "ready" ? course.upload.course : null;
+  const startLabel = processing ? "Uploading course…"
+    : readyCourse && readyCourse.course_id !== selectedCourse?.course_id ? "Start uploaded course"
+    : selectedCourse ? "Continue selected course"
+    : draft.files.length ? "Upload and start course" : "Open practice demo";
+  async function startStudy() {
+    if (processing) return;
+    // A local file selection is intent to study those materials. Only enter
+    // study after upload succeeds and the returned course is selected.
+    const nextCourse = readyCourse ?? selectedCourse ?? (
+      draft.files.length ? await course?.start(draft.files, draft.courseName) : null
+    );
+    if (nextCourse) {
+      course?.selectCourse(nextCourse);
+      onContinue();
+    } else if (!draft.files.length) {
+      onContinue();
+    }
+  }
   const [active, setActive] = useState(0);
   const [ready, setReady] = useState(false);
   const [errors, setErrors] = useState<DraftErrors>({});
@@ -194,9 +214,10 @@ export function Onboarding({
               <Button
                 variant="ghost"
                 className="text-xs text-muted-foreground"
-                onClick={onContinue}
+                onClick={() => void startStudy()}
+                disabled={processing}
               >
-                {selectedCourse ? "Continue selected course" : "Open practice demo"}
+                {startLabel}
                 <ArrowRight size={14} />
               </Button>
               {onSignOut && (
@@ -301,6 +322,8 @@ export function Onboarding({
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">
                       {selectedCourse
                         ? `Selected course: ${selectedCourse.title}. Your next session uses this course’s questions.`
+                        : draft.files.length || readyCourse
+                          ? "Start your uploaded course to study questions from these materials. Your course must finish processing before study begins."
                         : "The practice demo uses our Intro AI questions. Activate a processed course to study its questions. Goals remain a local draft."}
                     </p>
                   </div>
@@ -310,8 +333,8 @@ export function Onboarding({
                     <ArrowLeft size={16} />
                     Edit setup
                   </Button>
-                  <Button onClick={onContinue}>
-                    {selectedCourse ? "Continue selected course" : "Open practice demo"}
+                  <Button onClick={() => void startStudy()} disabled={processing}>
+                    {startLabel}
                     <ArrowRight size={17} />
                   </Button>
                 </div>

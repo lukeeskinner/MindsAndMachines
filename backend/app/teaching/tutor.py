@@ -328,8 +328,13 @@ def _validated_text(raw: str, paragraphs: list[str], step_by_step: bool, *,
 class Tutor:
     """Generate at most once; keep all policy choices in trusted application code."""
 
-    def __init__(self, catalog: Catalog | RuntimeCatalog) -> None:
+    def __init__(self, catalog: Catalog | RuntimeCatalog, *,
+                 continuation_question_id: str | None = None) -> None:
         self.catalog = catalog
+        if continuation_question_id is not None:
+            if not isinstance(catalog, RuntimeCatalog) or continuation_question_id not in catalog.questions:
+                raise ValueError("Unknown course continuation question")
+        self.continuation_question_id = continuation_question_id
 
     async def teach(self, decision: Decision | None, assessment: Assessment,
                     concepts: list[ConceptEstimate],
@@ -342,6 +347,11 @@ class Tutor:
             return result
 
         if decision is None:
+            if self.continuation_question_id is not None:
+                return finish(TeachingResult(
+                    text="You have finished the available questions for this concept. Continue with the next concept.",
+                    next_question_id=self.continuation_question_id, fallback=False,
+                ), "concept_transition")
             completion = ("This course activity is complete." if isinstance(self.catalog, RuntimeCatalog)
                           else _COMPLETION)
             return finish(TeachingResult(text=completion, next_question_id=None, fallback=False), "completion")

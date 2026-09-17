@@ -27,8 +27,8 @@ export async function post<T>(path: string, body: object): Promise<T> {
     const uploaded = path === "sessions" && "course_id" in body;
     const message = uploaded && response.status === 404
       ? "This course is no longer available. The service may have restarted. Upload the materials again or choose the demo."
-      : path === "turns" && response.status === 409
-        ? "Study for this uploaded course is not available yet. Your course has not been graded."
+      : path === "turns" && response.status === 404
+        ? "This session or its course is no longer available. Start a new session; if the course is missing, upload the materials again."
         : response.status === 401 || response.status === 403
           ? "Please sign in again to continue."
           : "We couldn’t complete that request. Start a new session to try again.";

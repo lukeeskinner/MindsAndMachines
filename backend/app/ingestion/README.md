@@ -116,24 +116,50 @@ MODEL_PROVIDER=bedrock python3 -m backend.app.ingestion \
   --mode bedrock --title 'Graph search' lecture5.pdf
 ```
 
-The same response now also includes exactly three teaching items per concept:
-`diagnostic_probe`, `worked_example` and `socratic_hint`. Each has `kind`,
-`paragraphs` and `source_refs`; trusted code assigns its stable ID and review flag.
-Subject prose must be cited excerpts or fixed process templates, and all kinds
-reject direct copying of any course answer/rubric. Local mode uses conservative
-process templates without a provider. See [runtime catalog](../teaching/RUNTIME_CATALOG.md)
-for the disclosure checks, their limitations, deterministic rendering and optional
-Bedrock Tutor personalization. Course processing still has only one provider call.
+Bedrock now returns a compact question plan referencing server-created source
+passages and answer snippets by ID. Its schema enumerates valid IDs and requires
+`first_question` / `second_question`, each with `prompt`, `answer_id` and three
+string fields `wrong_option_1` / `wrong_option_2` / `wrong_option_3`. These required
+fields encode cardinality without relying only on array-size instructions. It writes the question prompts and distractors;
+it does not write citations, correct-choice text, answer indices or explanations.
+A forced Bedrock tool response carries the plan as a structured object rather
+than JSON embedded in prose. This is only an output envelope: no tool action is
+executed and no tool-result or second inference call is sent. The server rejects
+missing, multiple, mismatched or truncated tool responses. The server resolves
+IDs only against this upload, supplies exact source evidence,
+and runs the existing artifact validators. Unknown/duplicate passage IDs,
+cross-passage answers, extra fields and ambiguous distractors are rejected.
 
-There is exactly one provider call with a 6,000-token output budget. The existing
-provider deadline/retry policy applies. Generation returns 1–4 concepts and 2–4
-questions each, at most 16 total. No retries, repair calls, provider switching, or
+Passages are contiguous normalized source windows of at most 800 characters.
+Their labels use a short source heading where available, otherwise the first
+seven words. Answers disclosed by the label are excluded. Candidate answers are source sentences with at least three words;
+answers that would overlap stored guidance are excluded before generation.
+The model selects up to four passages. This remains extractive assessment;
+labels and answer snippets are not a semantic curriculum analysis.
+
+Each concept receives the existing three authored process-guidance artifacts:
+`diagnostic_probe`, `worked_example` and `socratic_hint`. This is an explicit part
+of the new generation contract, not a fallback after a rejected model response.
+The prompt tells the model that code supplies this guidance. Source references,
+IDs and review flags are assigned in code; all artifacts still pass answer-leakage
+checks. Runtime Bedrock Tutor personalization remains unchanged. See
+[runtime catalog](../teaching/RUNTIME_CATALOG.md) for its limits and draft notices.
+
+There is exactly one provider call with a 6,000-token output budget. It explicitly
+uses `purpose="course_ingestion"`: `BEDROCK_INGESTION_TIMEOUT_SECONDS` defaults to
+60 seconds and accepts values above zero up to 90. Interactive assessment/Tutor
+calls retain `BEDROCK_TIMEOUT_SECONDS` (default 12, maximum 15) and their existing
+stage budgets. An enclosing provider deadline still caps either purpose; SDK
+retries remain disabled. Generation selects 1–4 passages and writes exactly two
+questions each, at most eight total. No retries, repair calls, provider switching, or
 automatic local fallback occur. Malformed/unsupported output and provider failures
 raise `IngestionError`; callers may explicitly request a separate local run.
 Model output can vary between runs; this branch does not claim Bedrock determinism.
 
-The model receives chunk IDs and normalized text, without filenames or location
-metadata. Strict JSON requires exact keys/types, bounded nonempty lists/text,
+The model receives request-scoped passage/answer IDs and their exact text, without
+filenames, internal chunk IDs or location metadata. A single complete outer Markdown fence (JSON or unlabeled) is accepted;
+surrounding prose and multiple blocks are not. Its contents still undergo all
+validation. Strict JSON requires exact keys/types, bounded nonempty lists/text,
 and no duplicate object keys or NaN/Infinity. Extra ID/provenance fields are
 rejected. Concepts require unique names and source-verbatim names/summaries.
 Questions require distinct prompts/choices, an integer answer index, their

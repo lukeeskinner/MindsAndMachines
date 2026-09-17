@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock, patch
 
 from backend.app.agents.provider import ProviderResult
 from backend.app.ingestion import IngestionError, extract_material, process_course
-from backend.app.ingestion.models import ProcessedCourse
+from backend.app.ingestion.models import ProcessedCourse, normalized
 from backend.app.ingestion.pipeline import SYSTEM, _local_proposal, validate_proposal
 from backend.app.ingestion.teaching import PROCESS_TEMPLATES, contains_phrase
+from backend.tests.ingestion.helpers import plan_for
 from backend.app.learner.bayesian import BayesianLearner
 from backend.app.teaching.runtime_catalog import build_runtime_catalog
 from backend.app.teaching.tutor import Tutor
@@ -19,6 +20,32 @@ from contracts.models import Assessment, Decision, LearnerPresentationPreference
 
 
 FIXTURE = Path(__file__).parent / "fixtures/course.pptx"
+
+
+# A synthetic example of the exact evidence contract, never course input.
+_GROUNDING_EXAMPLE_SOURCE = {
+    "chunk_id": "example_only",
+    "normalized_text": "Water transport Xylem carries water from roots to leaves. Phloem transports sugars from leaves.",
+}
+_GROUNDING_EXAMPLE_QUOTE = "Xylem carries water from roots to leaves."
+_GROUNDING_EXAMPLE = {"concepts": [{
+    "name": "Water transport",
+    "summary": _GROUNDING_EXAMPLE_QUOTE,
+    "source_refs": [{"chunk_id": "example_only", "quote": _GROUNDING_EXAMPLE_SOURCE["normalized_text"]}],
+    "questions": [
+        {"prompt": "For Water transport, which tissue carries water from roots to leaves?",
+         "choices": ["Xylem", "Muscle"], "answer_index": 0,
+         "explanation": _GROUNDING_EXAMPLE_QUOTE,
+         "source_refs": [{"chunk_id": "example_only", "quote": _GROUNDING_EXAMPLE_QUOTE}]},
+        {"prompt": "For Water transport, in which direction does xylem carry water?",
+         "choices": ["from sky to clouds", "from roots to leaves"], "answer_index": 1,
+         "explanation": _GROUNDING_EXAMPLE_QUOTE,
+         "source_refs": [{"chunk_id": "example_only", "quote": _GROUNDING_EXAMPLE_QUOTE}]},
+    ],
+    "teaching": [{"kind": kind, "paragraphs": list(paragraphs),
+                  "source_refs": [{"chunk_id": "example_only", "quote": _GROUNDING_EXAMPLE_QUOTE}]}
+                 for kind, paragraphs in PROCESS_TEMPLATES.items()],
+}]}
 
 
 class TeachingIngestionTests(unittest.IsolatedAsyncioTestCase):
@@ -52,7 +79,7 @@ class TeachingIngestionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(contains_phrase(text, question.explanation))
 
     async def test_single_bedrock_response_contains_all_artifacts(self):
-        self.complete.return_value = ProviderResult(json.dumps(self.proposal), "bedrock", "mock", 0)
+        self.complete.return_value = ProviderResult(json.dumps(plan_for(self.materials)), "bedrock", "mock", 0)
         with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
             course = await process_course([FIXTURE], mode="bedrock")
             catalog = build_runtime_catalog(course)
@@ -72,18 +99,97 @@ class TeachingIngestionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(course.metadata.provider_calls, 1)
         self.assertTrue(course.concepts and course.questions and course.teaching)
         self.assertEqual({t.kind for t in course.teaching}, set(PROCESS_TEMPLATES))
-        self.assertIn("teaching (exactly 3 items)", SYSTEM)
-        self.assertEqual(set(json.loads(self.complete.call_args.args[0])), {"sources"})
+        self.assertIn("answer_id", SYSTEM)
+        self.assertEqual(set(json.loads(self.complete.call_args.args[0])), {"passages"})
         self.assertEqual(self.complete.call_args.kwargs["max_tokens"], 6000)
+        self.assertEqual(self.complete.call_args.kwargs["purpose"], "course_ingestion")
 
-    async def test_rejected_teaching_has_no_retry_or_fallback(self):
-        self.proposal["concepts"][0]["teaching"][0]["paragraphs"] = ["Invented unsupported teaching."]
-        self.complete.return_value = ProviderResult(json.dumps(self.proposal), "bedrock", "mock", 0)
+    async def test_local_question_headings_do_not_create_common_word_answer_collisions(self):
+        for heading in ("Which Derivative Rule Should I Use?", "What Does a Derivative Measure?",
+                        "The Derivative of a Polynomial"):
+            text = heading + "\nA derivative measures the instantaneous rate of change of a function."
+            chunk = replace(self.materials[0].chunks[0], text=text, normalized_text=normalized(text))
+            material = replace(self.materials[0], chunks=(chunk,))
+            with self.subTest(heading=heading), patch("backend.app.ingestion.pipeline.extract_material", return_value=material):
+                course = await process_course([FIXTURE], mode="local")
+                self.assertEqual(len(course.questions), 2)
+                self.assertEqual(len(course.teaching), 3)
+                for question in course.questions:
+                    answer = next(choice.text for choice in question.choices if choice.id == question.answer_key)
+                    self.assertIn(answer, chunk.normalized_text)
+                    for artifact in course.teaching:
+                        self.assertFalse(contains_phrase(" ".join(artifact.paragraphs), answer))
+        self.complete.assert_not_called()
+
+    async def test_plan_cannot_inject_teaching_or_trigger_retry_or_fallback(self):
+        plan = plan_for(self.materials)
+        plan["concepts"][0]["teaching"] = ["Invented unsupported teaching."]
+        self.complete.return_value = ProviderResult(json.dumps(plan), "bedrock", "mock", 0)
         with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
-            with self.assertRaisesRegex(IngestionError, "supported") as caught:
+            with self.assertRaisesRegex(IngestionError, "unexpected fields") as caught:
                 await process_course([FIXTURE], mode="bedrock")
         self.assertEqual(caught.exception.materials, self.materials)
         self.complete.assert_awaited_once()
+
+    async def test_single_json_fence_from_bedrock_keeps_all_content_validation(self):
+        for language in ("json", "", "JSON"):
+            self.complete.reset_mock()
+            self.complete.return_value = ProviderResult(
+                f"```{language}\n{json.dumps(plan_for(self.materials))}\n```", "bedrock", "mock", 0)
+            with self.subTest(language=language), patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+                course = await process_course([FIXTURE], mode="bedrock")
+                self.assertEqual(course.metadata.provider_calls, 1)
+                self.assertTrue(build_runtime_catalog(course).questions)
+                self.complete.assert_awaited_once()
+
+    async def test_source_text_elsewhere_on_page_does_not_validate_incomplete_evidence(self):
+        source = _GROUNDING_EXAMPLE_SOURCE
+        chunk = replace(self.materials[0].chunks[0], chunk_id=source["chunk_id"],
+                        text=source["normalized_text"], normalized_text=source["normalized_text"])
+        material = replace(self.materials[0], chunks=(chunk,))
+        # The complete synthetic bank passes the full pipeline, including
+        # teaching and runtime construction, before shortening its evidence.
+        concepts, questions = validate_proposal(json.dumps(_GROUNDING_EXAMPLE), (material,), "course_test")
+        self.assertEqual(len(concepts), 1)
+        self.assertEqual(len(questions), 2)
+        self.complete.assert_not_called()
+        for failure in ("concept_name", "concept_summary", "question_explanation", "distractor"):
+            proposal = copy.deepcopy(_GROUNDING_EXAMPLE)
+            concept = proposal["concepts"][0]
+            question = concept["questions"][0]
+            if failure == "concept_name":
+                concept["source_refs"][0]["quote"] = concept["summary"]
+            elif failure == "concept_summary":
+                concept["source_refs"][0]["quote"] = concept["name"]
+            elif failure == "question_explanation":
+                question["source_refs"][0]["quote"] = question["choices"][0]
+            else:
+                question["choices"][1] = "water"
+            # Every value still occurs on the cited page; the actual evidence
+            # window must support each field and exclude other answer choices.
+            with self.subTest(failure=failure), self.assertRaises(IngestionError):
+                validate_proposal(json.dumps(proposal), (material,), "course_test")
+        # Example text can never ground a course whose real sources differ.
+        with self.assertRaises(IngestionError):
+            validate_proposal(json.dumps(_GROUNDING_EXAMPLE), self.materials, "course_test")
+
+    def test_fences_do_not_allow_prose_duplicate_keys_or_invalid_teaching(self):
+        raw = json.dumps(self.proposal)
+        duplicate = raw.replace('"concepts":', '"concepts": [], "concepts":', 1)
+        invalid = copy.deepcopy(self.proposal)
+        invalid["concepts"][0]["teaching"][0]["paragraphs"] = ["Unsupported invented teaching."]
+        for value in (
+            "Commentary\n```json\n" + raw + "\n```",
+            "```json\n" + raw + "\n```\nCommentary",
+            "```python\n" + raw + "\n```",
+            "```json\n" + raw,
+            "```json\n" + raw + "\n```\n```json\n{}\n```",
+            "```json\n" + duplicate + "\n```",
+            "```json\n{\"concepts\": NaN}\n```",
+            "```json\n" + json.dumps(invalid) + "\n```",
+        ):
+            with self.subTest(prefix=value[:20]), self.assertRaises(IngestionError):
+                validate_proposal(value, self.materials, "test-course")
 
     async def test_legacy_constructor_remains_compatible(self):
         course = await process_course([FIXTURE], mode="local")

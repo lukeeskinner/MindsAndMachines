@@ -16,14 +16,16 @@ function useController(adapter: CourseUploadAdapter = defaultAdapter) {
   const inFlight = useRef(false);
   function receive(result: CourseUploadResult) {
     if (result.status === "failed") throw new CourseError(result.reason);
-    if (result.status === "ready") setUpload({ status: "ready", course: publicCourse(result.course) });
-    else throw new CourseError("processing");
+    if (result.status !== "ready") throw new CourseError("processing");
+    const course = publicCourse(result.course);
+    setUpload({ status: "ready", course });
+    return course;
   }
   async function start(files: File[], title: string) {
     if (!files.length || inFlight.current) return;
     inFlight.current = true;
     setUpload({ status: "processing" });
-    try { receive(await adapter.upload(files, title)); }
+    try { return receive(await adapter.upload(files, title)); }
     catch (error) { setUpload({ status: "failed", message: courseErrorMessage(error) }); }
     finally { inFlight.current = false; }
   }
