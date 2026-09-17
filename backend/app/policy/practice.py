@@ -12,7 +12,7 @@ def has_pools(runtime):
 def session_budget(runtime):
     if not has_pools(runtime):
         return len(runtime.questions)
-    return min(len(runtime.questions), max(2 * len(runtime.concept_ids), min(12, 3 * len(runtime.concept_ids) - 2)))
+    return min(len(runtime.questions), 4 * len(runtime.concept_ids))
 
 
 @dataclass
@@ -21,12 +21,15 @@ class PracticeSelection:
     session_number: int = 0
     budget: int = 10
     avoid_first: str | None = None
+    allowed_ids: list[str] | None = None
+    exposed: list[str] = field(default_factory=list)
 
     def pick(self, runtime, concepts, history, current=None, assessment=None):
         consumed = {h.question_id for h in history}
         if current:
             consumed.add(current.question_id)
-        remaining = [q for q in runtime.questions.values() if q.question_id not in consumed]
+        remaining = [q for q in runtime.questions.values() if q.question_id not in consumed
+                     and (self.allowed_ids is None or q.question_id in self.allowed_ids)]
         if not consumed and len(remaining) > 1 and self.avoid_first:
             remaining = [q for q in remaining if q.question_id != self.avoid_first]
         if len(consumed) >= self.budget or not remaining:
@@ -35,7 +38,8 @@ class PracticeSelection:
         estimates = {c.concept_id: c for c in concepts}
         previous_concept = runtime.questions[history[-1].question_id].concept_id if history else None
         retry = current and assessment and assessment.outcome == 'incorrect' and previous_concept != current.concept_id
-        fresh = [q for q in remaining if q.question_id not in self.recent]
+        from backend.app.learner.evidence import fingerprint
+        fresh = [q for q in remaining if q.question_id not in self.recent and fingerprint(q) not in self.exposed]
         eligible = fresh or remaining
         if retry:
             local = [q for q in eligible if q.concept_id == current.concept_id]
@@ -45,7 +49,7 @@ class PracticeSelection:
                      for i, cid in enumerate(runtime.concept_ids)}
         def key(q):
             c = estimates[q.concept_id]
-            tier = min(counts[q.concept_id], 2)
+            tier = min(counts[q.concept_id], 4)
             score = (1 - c.mean) + (c.interval90.upper - c.interval90.lower)
             recency = self.recent.index(q.question_id) if q.question_id in self.recent else -1
             return (tier, -score, recency, positions[q.concept_id], q.question_id)

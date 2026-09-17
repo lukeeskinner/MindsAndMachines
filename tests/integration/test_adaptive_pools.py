@@ -75,10 +75,10 @@ class AdaptivePoolsTests(unittest.TestCase):
             self.assertEqual(r["counts"]["submitted_answers"], len(seen))
             self.assertEqual(r["counts"]["accepted_observations"], len(seen) - int(len(seen)>=3))
             question = r["next_question"]
-        self.assertEqual(len(seen), 10)
-        self.assertEqual(r["counts"]["unique_questions_seen"], 10)
+        self.assertEqual(len(seen), 16)
+        self.assertEqual(r["counts"]["unique_questions_seen"], 16)
         self.assertEqual(len({q.concept_id for q in self.course.questions if q.question_id in seen}), 4)
-        self.assertEqual(sum(c["evidence_count"] for c in r["concepts"]),9)
+        self.assertEqual(sum(c["evidence_count"] for c in r["concepts"]),15)
 
     def test_retake_persists_beliefs_clears_practice_chat_and_explicit_reset(self):
         s = self.start()

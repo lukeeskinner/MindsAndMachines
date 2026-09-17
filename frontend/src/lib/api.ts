@@ -25,7 +25,9 @@ export async function post<T>(path: string, body: object): Promise<T> {
   if (!response.ok) {
     // Do not surface raw exceptions or unreviewed server detail strings.
     const uploaded = path === "sessions" && "course_id" in body;
-    const message = uploaded && response.status === 404
+    const message = path === "focus-practice"
+      ? "Focus practice could not start. Your learner model is preserved; please retry."
+      : uploaded && response.status === 404
       ? "This course is no longer available. The service may have restarted. Upload the materials again or choose the demo."
       : (path === "turns" || path === "chat") && response.status === 404
         ? "This session or its course is no longer available. Start a new session; if the course is missing, upload the materials again."

@@ -21,6 +21,8 @@ import {
   Waypoints,
 } from "lucide-react";
 import type {
+  CoachContext,
+  SessionResponse,
   PracticeCounts,
   ConceptEstimate,
   Flashcard,
@@ -42,6 +44,7 @@ import { motion, MotionConfig, useReducedMotion } from "motion/react";
 import { post, requestErrorMessage } from "./lib/api";
 import { createSession, CourseError } from "./lib/courses";
 import { CourseBoundary, useCourseLabels } from "./components/course/CourseContext";
+import { FocusRanking } from "./components/study/FocusRanking";
 import { BetaDistributionPlot } from "./components/study/BetaDistributionPlot";
 import { AnswerImpact } from "./components/study/AnswerImpact";
 import { Flashcards } from "./components/study/Flashcards";
@@ -184,6 +187,9 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
   const shortNames = activeCourse ? names : demoShortNames;
   const courseDraft = course.draft;
   const changeCourse = course.onChange;
+  const [analytics, setAnalytics] = useState<CoachContext>();
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [practiceNotice, setPracticeNotice] = useState("");
   const [counts, setCounts] = useState<PracticeCounts | null>(null);
   const [sessionStart, setSessionStart] = useState<ConceptEstimate[]>([]);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -218,13 +224,18 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
   const complete = !!sessionId && !question;
   const review = reviewing ? latest : undefined;
 
-  async function newSession(resetLearner = false) {
+  async function newSession(resetLearner = false, targetConcept?: string) {
     if (requestInFlight.current) return;
     requestInFlight.current = true;
     setBusy(true);
     setError("");
     try {
-      const result = await createSession(activeCourse, sessionId || undefined, resetLearner);
+      const result = targetConcept
+        ? await post<SessionResponse>("focus-practice", { session_id: sessionId, concept_id: targetConcept })
+        : await createSession(activeCourse, sessionId || undefined, resetLearner);
+      setAnalytics(result.analytics);
+      setFocusId(result.focus_concept_id ?? null);
+      setPracticeNotice(result.practice_notice ?? "");
       setCounts(result.counts ?? null);
       setSessionStart(result.session_start?.length ? result.session_start : result.concepts);
       setConfirmReset(false);
@@ -296,6 +307,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
       ]);
       setCounts(result.counts ?? null);
       setConcepts(result.concepts);
+      setAnalytics(result.analytics);
       setQuestion(result.next_question);
       if (result.flashcards) setFlashcards(result.flashcards);
       setAnswer("");
@@ -561,6 +573,8 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                   className="view-panel chatbot-page"
                 >
                   <StudyChatbot
+                    analytics={analytics}
+                    onPractice={activeCourse ? (id) => void newSession(false, id) : undefined}
                     key={sessionId}
                     sessionId={sessionId}
                     onBusyChange={value => { requestInFlight.current = value; setChatBusy(value); }}
@@ -594,7 +608,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                     <span
                       className={reviewing ? "done" : "current"}
                     >
-                      <b><BookOpen size={13} /></b>{complete ? "Practice complete" : `Question ${Math.max(1, entries.length + (reviewing ? 0 : 1))}${questionCount ? ` of ${questionCount}` : ""}`}
+                      <b><BookOpen size={13} /></b>{focusId ? "Focus practice · " : ""}{complete ? "Practice complete" : `Question ${Math.max(1, entries.length + (reviewing ? 0 : 1))}${questionCount ? ` of ${questionCount}` : ""}`}
                     </span>
                     <span className="path-rule" />
                     <span
@@ -603,6 +617,17 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                       <b><Check size={13} /></b>Review & reflect
                     </span>
                   </div>
+                  {practiceNotice && <p role="status">{practiceNotice}</p>}
+                  {focusId && (() => {
+                    const current = concepts.find(c => c.concept_id === focusId);
+                    const before = sessionStart.find(c => c.concept_id === focusId);
+                    return current && before ? <section className="focus-progress" aria-label="Focus practice progress">
+                      <h3>{shortNames[focusId]} · continuing your learner model</h3>
+                      <BetaDistributionPlot current={current} before={before} />
+                      <p>{pct(before.mean)} → {pct(current.mean)} estimate · {current.evidence_count - before.evidence_count} observations added</p>
+                      <p>90% interval width: {pct(before.interval90.upper - before.interval90.lower)} → {pct(current.interval90.upper - current.interval90.lower)}</p>
+                    </section> : null;
+                  })()}
                   <section className="study-surface" aria-busy={busy}>
                     {!sessionId && busy ? (
                       <div className="loading-state" role="status">
@@ -798,13 +823,17 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                           <strong>{counts?.unique_questions_seen ?? new Set(entries.map(e => e.question.question_id)).size}</strong>
                           <span>unique questions seen</span>
                         </div>
+                        {counts && <p>{counts.review_attempts ?? 0} review attempts · {counts.focus_observations ?? 0} focus observations this session · {counts.lifetime_evidence ?? concepts.reduce((n, c) => n + c.evidence_count, 0)} lifetime observations</p>}
                         {entries[0] && (
                           <EvidenceComparison
                             before={sessionStart}
                             after={concepts}
                           />
                         )}
+                        <FocusRanking analytics={analytics} busy={busy}
+                          onPractice={activeCourse ? (id) => void newSession(false, id) : undefined} />
                         <div className="completion-actions">
+                          <Button onClick={openChatbot}>Discuss my results</Button>
                           <Button onClick={() => setView("map")}>
                             Explore concept map
                             <ArrowRight size={16} />

@@ -3,7 +3,8 @@ from contextlib import contextmanager
 from dataclasses import replace
 from uuid import uuid4
 from backend.app.learner.bayesian import BayesianLearner
-from backend.app.learner.evidence import fingerprint
+from backend.app.policy.focus import coach_context
+from backend.app.teaching.focus_questions import apply_focus_questions, generate_focus_questions, record_exposure, already_exposed
 from backend.app.policy.practice import PracticeSelection, session_budget, has_pools
 from backend.app.teaching.chat import answer_message
 from backend.app.agents.provider import ProviderError
@@ -18,7 +19,7 @@ from backend.app.teaching.flashcards import demo_flashcards, course_flashcards
 from backend.app.teaching.remediation import RemediationTurn, rank_flashcards
 from backend.app.ingestion.models import IngestionError
 from backend.app.teaching.runtime_catalog import RuntimeAvailability, RuntimeCatalog, build_runtime_catalog
-from contracts.models import PracticeCounts, ChatRequest, ChatResponse, HistoryEntry, SessionRequest, SessionResponse, TurnRequest, TurnResponse
+from contracts.models import FocusRequest, PracticeCounts, ChatRequest, ChatResponse, HistoryEntry, SessionRequest, SessionResponse, TurnRequest, TurnResponse
 
 
 def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catalog: Catalog,
@@ -98,19 +99,20 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
                 profile.session_number += 1
             initial = BayesianLearner().describe(profile.state)
             runtime = course_catalog if request.course_id else catalog
+            if request.course_id:
+                apply_focus_questions(runtime, profile)
             budget = session_budget(runtime) if request.course_id else question_count
             if request.course_id and (has_pools(runtime) or previous is not None):
-                selection = PracticeSelection(profile.recent, profile.session_number, budget, profile.first_question_id)
+                selection = PracticeSelection(profile.recent, profile.session_number, budget, profile.first_question_id, exposed=profile.exposed)
                 question = selection.pick(runtime, initial.concepts, [])
             elif previous is not None:
                 choices = [q for q in catalog.questions.values() if q.question_id != profile.first_question_id]
                 question = min(choices or list(catalog.questions.values()), key=lambda q:
                                profile.recent.index(q.question_id) if q.question_id in profile.recent else -1)
             public = question.public()
-            public.review = fingerprint(question) in profile.exposed
+            public.review = already_exposed(profile, question)
             # Issued questions count as exposed, even if a session is abandoned.
-            profile.exposed = list(dict.fromkeys([*profile.exposed, fingerprint(question)]))
-            profile.recent = [q for q in profile.recent if q != question.question_id] + [question.question_id]
+            record_exposure(profile, question)
             session_id = str(uuid4())
             profile.active_session_id = session_id
             profile.first_question_id = question.question_id
@@ -132,7 +134,63 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
             return SessionResponse(session_id=session_id, course_id=request.course_id,
                                    question=public, concepts=initial.concepts,
                                    session_start=initial.concepts, question_count=budget,
-                                   counts=PracticeCounts(unique_questions_seen=1), flashcards=cards)
+                                   counts=PracticeCounts(unique_questions_seen=1, lifetime_evidence=sum(c.evidence_count for c in initial.concepts)),
+                                   analytics=coach_context(runtime, initial.concepts, session, profile), flashcards=cards)
+
+    @router.post("/focus-practice", response_model=SessionResponse, status_code=201)
+    async def focus_practice(request: FocusRequest) -> SessionResponse:
+        with session_request(request.session_id):
+            try:
+                previous = store.load_session(request.session_id)
+            except KeyError:
+                raise HTTPException(404, "Session not found.") from None
+            if not previous.course_id or not previous.profile_id:
+                raise HTTPException(400, "Focus practice needs uploaded course sources.")
+            runtime = course_runtime(previous.course_id)
+            if request.concept_id not in runtime.concept_ids:
+                raise HTTPException(400, "Unknown course concept.")
+            profile = store.load_profile(previous.profile_id)
+            apply_focus_questions(runtime, profile)
+            choices = [q for q in runtime.questions.values() if q.concept_id == request.concept_id]
+            def fresh(q):
+                return not already_exposed(profile, q)
+            unseen = [q for q in choices if fresh(q)]
+            if len(unseen) < 3:
+                records = await generate_focus_questions(runtime, request.concept_id, profile, 3 - len(unseen))
+                for record in records:
+                    profile.focus_questions[record["question"]["question_id"]] = record
+                apply_focus_questions(runtime, profile)
+                choices = [q for q in runtime.questions.values() if q.concept_id == request.concept_id]
+                unseen = [q for q in choices if fresh(q)]
+            # Never pad a partly fresh set with review. A smaller set is honest.
+            selected = unseen[:3] if unseen else sorted(choices, key=lambda q:
+                profile.recent.index(q.question_id) if q.question_id in profile.recent else -1)[:3]
+            if not selected:
+                raise HTTPException(409, "No safe practice questions are available.")
+            notice = (f"{len(selected)} fresh questions. Your existing learner model continues."
+                      if unseen else "Only review items remain; no safe fresh questions survived. Review adds no new mastery evidence.")
+            initial = BayesianLearner().describe(profile.state)
+            question = selected[0]
+            public = question.public()
+            public.review = not fresh(question)
+            record_exposure(profile, question)
+            session_id = str(uuid4())
+            profile.active_session_id = session_id
+            profile.session_number += 1
+            session = Session(question.question_id, initial.state, user_id=previous.user_id,
+                course_id=previous.course_id, profile_id=previous.profile_id,
+                session_start=initial.state.model_copy(deep=True), budget=len(selected),
+                current_review=public.review, session_kind="focus", focus_concept_id=request.concept_id,
+                focus_question_ids=[q.question_id for q in selected])
+            store.save_progress(session_id, session, previous.profile_id, profile)
+            analytics = coach_context(runtime, initial.concepts, session, profile)
+            cards = rank_flashcards(course_flashcards(runtime.course), initial.concepts, None, previous.course_id)
+            return SessionResponse(session_id=session_id, course_id=previous.course_id,
+                question=public, concepts=initial.concepts, session_start=initial.concepts,
+                question_count=len(selected), counts=PracticeCounts(unique_questions_seen=1,
+                    lifetime_evidence=sum(c.evidence_count for c in initial.concepts)),
+                flashcards=cards, analytics=analytics, session_kind="focus",
+                focus_concept_id=request.concept_id, practice_notice=notice)
 
     @router.post("/turns", response_model=TurnResponse)
     async def turn(request: TurnRequest) -> TurnResponse:
@@ -149,6 +207,8 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
         if isinstance(runtime, RuntimeCatalog):
             try:
                 runtime.apply_session_questions(session.generated_questions)
+                if profile:
+                    apply_focus_questions(runtime, profile)
             except ValueError:
                 raise HTTPException(500, "Learning activity configuration error. Start a new session.") from None
         if request.question_id != session.question_id:
@@ -172,7 +232,8 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
                         current_question_id=request.question_id,
                         consumed_question_ids=[entry.question_id for entry in session.history],
                         consumed_candidate_ids=[entry.candidate_id for entry in session.history
-                                                if entry.candidate_id is not None and not has_pools(runtime)],
+                                                if entry.candidate_id is not None and not has_pools(runtime)
+                                                and session.session_kind != "focus" and not (profile and profile.focus_questions)],
                     )
                 except ValueError as exc:
                     raise IntegrationError("Course history contains foreign IDs") from exc
@@ -180,9 +241,11 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
                 active_coordinator = course_coordinator(runtime, availability)
             if profile is not None:
                 active_coordinator = replace(active_coordinator, evidence_eligible=not session.current_review)
-                if isinstance(runtime, RuntimeCatalog) and has_pools(runtime):
+                if isinstance(runtime, RuntimeCatalog) and (has_pools(runtime) or session.session_kind == "focus" or profile.focus_questions):
                     active_coordinator.practice_selection = PracticeSelection(
-                        profile.recent, profile.session_number, session.budget)
+                        profile.recent, profile.session_number, session.budget,
+                        allowed_ids=session.focus_question_ids if session.session_kind == "focus" else None,
+                        exposed=profile.exposed)
             remediation = RemediationTurn(session.course_id, session.remediation_focus)
             update, response = await active_coordinator.run_turn(
                 request, question, session.learner_state, session.history,
@@ -194,7 +257,7 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
             raise HTTPException(500, "Learning activity configuration error. Start a new session.") from None
         entry = HistoryEntry(question_id=question.question_id,
                              evidence_applied=update.evidence_applied,
-                             candidate_id=response.decision.candidate_id if response.decision else None)
+                             candidate_id=response.decision.candidate_id if response.decision else None, review=session.current_review)
         generated = dict(session.generated_questions)
         if remediation.generated is not None:
             generated[remediation.generated.question.question_id] = remediation.generated
@@ -209,11 +272,10 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
             if response.next_question:
                 next_item = (remediation.generated.question if remediation.generated is not None
                              else runtime.questions[response.next_question.question_id])
-                review = fingerprint(next_item) in profile.exposed
+                review = already_exposed(profile, next_item)
                 response.next_question.review = review
                 updated_session.current_review = review
-                profile.exposed = list(dict.fromkeys([*profile.exposed, fingerprint(next_item)]))
-                profile.recent = [q for q in profile.recent if q != next_item.question_id] + [next_item.question_id]
+                record_exposure(profile, next_item)
             store.save_progress(request.session_id, updated_session, session.profile_id, profile)
         else:
             store.save_session(request.session_id, updated_session)
@@ -221,8 +283,12 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
             submitted_answers=len(updated_session.history),
             unique_questions_seen=len({h.question_id for h in updated_session.history}
                                       | ({updated_session.question_id} if updated_session.question_id else set())),
-            accepted_observations=sum(h.evidence_applied for h in updated_session.history))
+            accepted_observations=sum(h.evidence_applied for h in updated_session.history),
+            review_attempts=sum(h.review for h in updated_session.history),
+            focus_observations=sum(h.evidence_applied for h in updated_session.history) if session.session_kind == "focus" else 0,
+            lifetime_evidence=sum(c.evidence_count for c in update.concepts))
         response.session_start = BayesianLearner().describe(session.session_start or session.learner_state).concepts
+        response.analytics = coach_context(runtime, update.concepts, updated_session, profile)
         return response
 
     @router.post("/chat", response_model=ChatResponse)
@@ -237,16 +303,22 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
             runtime = course_runtime(session.course_id) if session.course_id is not None else catalog
             cards = course_flashcards(runtime.course) if isinstance(runtime, RuntimeCatalog) else demo_flashcards()
             title = runtime.course.title if isinstance(runtime, RuntimeCatalog) else "Intro AI"
+            profile = store.load_profile(session.profile_id) if session.profile_id else None
+            if isinstance(runtime, RuntimeCatalog) and profile:
+                apply_focus_questions(runtime, profile)
             current_concept = next((q.concept_id for q in runtime.questions.values()
                                     if q.question_id == session.question_id), None)
             if session.question_id in session.generated_questions:
                 current_concept = session.generated_questions[session.question_id].question.concept_id
+            analytics = coach_context(runtime, BayesianLearner().describe(session.learner_state).concepts, session, profile)
             try:
-                exchange = await answer_message(request, cards, title, current_concept, session)
+                exchange = await answer_message(request, cards, title, current_concept, session, analytics)
             except ProviderError:
                 raise HTTPException(503, "The tutor is unavailable. Please retry your message.") from None
             store.save_session(request.session_id, replace(
                 session, chat_history=[*session.chat_history, exchange][-12:]))
-            return ChatResponse(session_id=request.session_id, **exchange.model_dump())
+            from backend.app.teaching.chat import requested_concept
+            return ChatResponse(session_id=request.session_id, **exchange.model_dump(), analytics=analytics,
+                                practice_concept_id=requested_concept(request.message, analytics) if session.course_id else None)
 
     return router

@@ -50,6 +50,9 @@ class DynamoStore:
             session_start=LearnerState(**data["session_start"]) if data.get("session_start") else None,
             budget=data.get("budget", 0),
             current_review=data.get("current_review", False),
+            session_kind=data.get("session_kind", "diagnostic"),
+            focus_concept_id=data.get("focus_concept_id"),
+            focus_question_ids=data.get("focus_question_ids", []),
             remediation_focus=RemediationFocus(**data["remediation_focus"]) if data.get("remediation_focus") else None,
             chat_history=[ChatExchange(**entry) for entry in data.get("chat_history", [])],
             generated_questions={key: GeneratedQuestion(**value)
@@ -61,6 +64,9 @@ class DynamoStore:
 
     def _data(self, session: Session):
         data = {
+            "session_kind": session.session_kind,
+            "focus_concept_id": session.focus_concept_id,
+            "focus_question_ids": session.focus_question_ids,
             "profile_id": session.profile_id,
             "session_start": session.session_start.model_dump() if session.session_start else None,
             "budget": session.budget,

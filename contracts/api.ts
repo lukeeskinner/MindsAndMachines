@@ -41,6 +41,8 @@ export interface ChatRequest {
   presentation_preferences?: LearnerPresentationPreferences;
 }
 export interface ChatResponse {
+  analytics?: CoachContext;
+  practice_concept_id?: string | null;
   session_id: string;
   message: string;
   text: string;
@@ -50,8 +52,15 @@ export interface PracticeCounts {
   submitted_answers: number;
   unique_questions_seen: number;
   accepted_observations: number;
+  review_attempts?: number;
+  focus_observations?: number;
+  lifetime_evidence?: number;
 }
 export interface SessionResponse {
+  analytics?: CoachContext;
+  session_kind?: "diagnostic" | "focus";
+  focus_concept_id?: string | null;
+  practice_notice?: string;
   counts?: PracticeCounts;
   session_start?: ConceptEstimate[];
   session_id: string;
@@ -75,6 +84,7 @@ export interface TurnRequest {
   presentation_preferences?: LearnerPresentationPreferences;
 }
 export interface TurnResponse {
+  analytics?: CoachContext;
   counts?: PracticeCounts;
   session_start?: ConceptEstimate[];
   flashcards?: Flashcard[];
@@ -100,4 +110,20 @@ export interface TurnResponse {
   mode: 'dummy' | 'live';
   provider: 'fake' | 'bedrock';
   trace: string[];
+}
+
+export interface FocusPriority {
+  concept_id: string;
+  concept_name: string;
+  focus_priority: number;
+  mastery_mean: number;
+  interval90: { lower: number; upper: number };
+  evidence_count: number;
+  unseen_questions: number;
+  reasons: string[];
+}
+export interface CoachContext {
+  session_complete: boolean;
+  session_kind: 'diagnostic' | 'focus';
+  focus_ranking: FocusPriority[];
 }

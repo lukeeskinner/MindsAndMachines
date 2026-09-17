@@ -2242,3 +2242,8 @@
 .concept-row .beta-plot { grid-column: 1 / -1; }
 .evidence-comparison dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
 .review-notice { padding: 12px; border-radius: 8px; background: #fff4d9; color: #604914; }
+
+.focus-ranking, .focus-progress { margin: 1.25rem 0; padding: 1rem; border: 1px solid var(--border, #d8dfdc); border-radius: 12px; text-align: left; }
+.focus-ranking ol { padding-left: 1.5rem; }
+.focus-ranking li { margin: 1rem 0; }
+.focus-ranking p, .focus-progress p { font-size: .85rem; margin: .4rem 0; }

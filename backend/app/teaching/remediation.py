@@ -47,12 +47,13 @@ DEMO_CARD_MISCONCEPTIONS = {"demo-card-6": "admissible_means_consistent"}
 def rank_flashcards(cards: list[Flashcard], estimates: list[ConceptEstimate],
                     focus: RemediationFocus | None, course_id: str | None,
                     misconceptions: dict[str, str] | None = None) -> list[Flashcard]:
-    """Stable lexicographic order: focus, matching card, lower mean, original order.
+    """Stable lexicographic order: focus, matching card, trusted focus score, original order.
 
-    No synthetic statistical score or policy formula. An absent concept/card
+    Uses the coach policy score. An absent concept/card
     leaves authored tie order intact. Callers supply only the active course deck.
     """
-    means = {estimate.concept_id: estimate.mean for estimate in estimates}
+    from backend.app.policy.focus import priority_score
+    priorities = {estimate.concept_id: priority_score(estimate) for estimate in estimates}
     focus = focus if focus and focus.course_id == course_id else None
     tags = misconceptions if misconceptions is not None else (
         DEMO_CARD_MISCONCEPTIONS if course_id is None else {})
@@ -61,7 +62,7 @@ def rank_flashcards(cards: list[Flashcard], estimates: list[ConceptEstimate],
         focused = bool(focus and card.concept_id == focus.concept_id)
         specific = bool(focused and focus.misconception_id
                         and tags.get(card.card_id) == focus.misconception_id)
-        return (not focused, not specific, means.get(card.concept_id, 1.0))
+        return (not focused, not specific, -priorities.get(card.concept_id, 0.0))
 
     return sorted(cards, key=key)
 

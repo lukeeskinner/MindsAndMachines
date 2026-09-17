@@ -44,7 +44,7 @@ class CourseSessionTests(unittest.TestCase):
         self.assertEqual(stored.course_id, self.course.course_id)
         self.assertEqual(stored.question_id, self.course.questions[0].question_id)
         self.assertEqual(result["course_id"], self.course.course_id)
-        self.assertEqual(set(result), {"session_id", "course_id", "question", "concepts", "question_count", "flashcards", "counts", "session_start"})
+        self.assertEqual(set(result), {"session_id", "course_id", "question", "concepts", "question_count", "flashcards", "counts", "session_start", "analytics", "practice_notice", "focus_concept_id", "session_kind"})
         self.assertEqual(set(result["question"]), {"question_id", "concept_id", "prompt", "choices", "review"})
         self.assertEqual(set(stored.learner_state.skills), {c.concept_id for c in self.course.concepts})
         self.assertEqual(stored.history, [])

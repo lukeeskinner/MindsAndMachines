@@ -9,6 +9,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import type {
+  CoachContext,
   ChatResponse,
   ConceptEstimate,
   LearnerPresentationPreferences,
@@ -19,9 +20,12 @@ import { TeachingSource } from "./TeachingSource";
 import { TeachingPreferences } from "./TeachingPreferences";
 import { percent, type StudyEntry } from "./model";
 
+import { FocusRanking } from "./FocusRanking";
 import { post, requestErrorMessage } from "../../lib/api";
 
 type Props = {
+  analytics?: CoachContext;
+  onPractice?: (conceptId: string) => void;
   sessionId: string;
   onBusyChange: (value: boolean) => void;
   entries: StudyEntry[];
@@ -35,12 +39,16 @@ type Props = {
 };
 
 const prompts = [
+  "How did I do and what should I focus on?",
+  "Give me more practice on my weakest concept.",
   "Explain this differently",
   "Walk me through the example",
   "Help me compare these concepts",
 ];
 
 export function StudyChatbot({
+  analytics,
+  onPractice,
   sessionId,
   onBusyChange,
   entries,
@@ -101,6 +109,7 @@ export function StudyChatbot({
         <div className="chat-learner-message"><span className="chat-speaker">You</span><p>{message.message}</p></div>
         <div className="chat-tutor-message">
           <span className="chat-speaker">Study tutor · {message.teaching_source === "bedrock" ? "AI-generated response" : "Local study notes"}</span>
+          {message === messages.at(-1) && message.practice_concept_id && onPractice && <Button disabled={busy} onClick={() => onPractice(message.practice_concept_id!)}>Practice this concept</Button>}
           <div className="chat-response">{message.text.split(/\n\s*\n/).map((paragraph, i) => <p key={i}>{paragraph}</p>)}</div>
         </div>
       </Scene>
@@ -292,6 +301,7 @@ export function StudyChatbot({
           className="chat-tools"
           aria-label="Chatbot context and preferences"
         >
+          <FocusRanking analytics={analytics} busy={busy} onPractice={onPractice} />
           <p className="chat-tools-label">IN THIS SESSION</p>
           <p className="chat-topic">
             {currentConcept

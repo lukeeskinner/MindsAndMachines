@@ -20,6 +20,9 @@ class Session:
     session_start: LearnerState | None = None
     budget: int = 0
     current_review: bool = False
+    session_kind: str = "diagnostic"
+    focus_concept_id: str | None = None
+    focus_question_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -32,6 +35,9 @@ class LearnerProfile:
     session_number: int = 0
     active_session_id: str | None = None
     first_question_id: str | None = None
+    focus_questions: dict = field(default_factory=dict)
+    exposed_stems: list[str] = field(default_factory=list)
+    exposed_facts: list[str] = field(default_factory=list)
 
 
 class MemoryStore:

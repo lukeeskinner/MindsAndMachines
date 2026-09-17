@@ -12,9 +12,9 @@ class ProfileStoreTests(unittest.TestCase):
                 state=BayesianLearner().initial_state(['power']).state
                 state.skills['power'].alpha=2
                 state.skills['power'].evidence_count=1
-                profile=LearnerProfile(state,'calculus',exposed=['fingerprint'],recent=['q1'],session_number=2,active_session_id='s2')
+                profile=LearnerProfile(state,'calculus',exposed=['fingerprint'],recent=['q1'],session_number=2,active_session_id='s2', focus_questions={'q3': {'question': {'question_id': 'q3'}}}, exposed_stems=['stem'], exposed_facts=['fact'])
                 session=Session('q2',state,course_id='calculus',profile_id='learner',
-                                session_start=state.model_copy(deep=True),budget=10,current_review=True)
+                                session_start=state.model_copy(deep=True),budget=3,current_review=True,session_kind="focus",focus_concept_id="power",focus_question_ids=["q2","q3"])
                 store.save_progress('s2',session,'learner',profile)
                 self.assertEqual(store.load_profile('learner'),profile)
                 self.assertEqual(store.load_session('s2'),session)

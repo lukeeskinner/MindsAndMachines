@@ -188,7 +188,7 @@ types, golden response and callers together before merge.
   are not distributed multi-worker concurrency guarantees.
 - PracticeSelection chooses evidence; AdaptivePolicy still chooses the intervention.
   Rich pools use coverage, mastery gap and interval width, with one immediate fresh
-  same-concept retry after an error. Four concepts receive a 10-question budget.
+  same-concept retry after an error. Four concepts receive up to a 16-question budget (four per concept, bounded by the safe bank).
   Lifetime-unseen content is preferred; exhausted banks use labeled, uncounted
   review without replacement within the session. No unbounded replenishment occurs.
 - Flashcards expose three distinct source excerpts per rich concept. Server priority
@@ -203,3 +203,17 @@ ADAPTIVE_POOLS_REPORT.md. The visible prompt is server-constrained and asks for
 the original missing ending after a quoted prefix. The answer is the exact missing source ending; it remains an exact source substring. This is a literal-recall assessment contract, not a
 claim that generated free-form application distractors are semantically verified.
 No filename, title, subject name, or authored demo option selects production logic.
+
+
+## Learner-aware focus extension
+
+Session/turn responses add `analytics: CoachContext`; session responses also add explicit
+`session_kind`, `focus_concept_id` and `practice_notice`. Chat responses add current
+analytics and an optional trusted `practice_concept_id`. `PracticeCounts` adds
+`review_attempts`, `focus_observations` and `lifetime_evidence`. History records review
+eligibility separately. The new `/focus-practice` endpoint links a short session to the
+same profile. Profile storage adds generated grounded items, normalized exposed stems
+and source facts. See [the complete focus contract](LEARNER_AWARE_FOCUS.md) for lifecycle,
+ranking, one-call generation, read-only coaching and failure semantics. Python,
+TypeScript, storage and the golden response are updated together; review this additive
+shared-contract change before merge.

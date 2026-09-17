@@ -4,6 +4,13 @@
 
 **Uploaded-course integration:** PDF/PPTX uploads can now start course-bound learning sessions through those same seams, using course-specific questions and stored teaching. Rich source-backed pools use bounded adaptive practice; smaller legacy banks retain their existing progression. See the [integration handoff and manual Grad Algorithms walkthrough](docs/UPLOADED_COURSE_INTEGRATION.md).
 
+**Learner-aware coaching and focus practice:** rich initial sessions now aim for four
+accepted observations per concept (up to 16 for four concepts, limited by the safe bank).
+Completion and chat show trusted practice priorities. Select a concept to continue the
+same learner model with up to three fresh source-grounded questions; exhausted pools
+are explicitly labeled review and add no evidence. Focus plots show the existing
+posterior moving with each accepted answer. See [coaching and focus contracts](docs/LEARNER_AWARE_FOCUS.md).
+
 The **Chatbot** supports session-scoped follow-up messages grounded in the selected
 course's public study notes. Bedrock mode makes a real bounded call; local mode
 labels its response as local notes. Conversation survives view changes and clears

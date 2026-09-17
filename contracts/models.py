@@ -63,6 +63,28 @@ class ConceptEstimate(Record):
     evidence_count: int
 
 
+class FocusPriority(Record):
+    concept_id: str
+    concept_name: str
+    focus_priority: float
+    mastery_mean: float
+    interval90: Interval
+    evidence_count: int
+    unseen_questions: int
+    reasons: list[str]
+
+
+class CoachContext(Record):
+    session_complete: bool
+    session_kind: Literal["diagnostic", "focus"] = "diagnostic"
+    focus_ranking: list[FocusPriority]
+
+
+class FocusRequest(Record):
+    session_id: str
+    concept_id: str
+
+
 class SkillState(Record):
     alpha: int
     beta: int
@@ -111,6 +133,7 @@ class HistoryEntry(Record):
     question_id: str
     evidence_applied: bool
     candidate_id: str | None
+    review: bool = False
 
 
 class PublicAssessment(Record):
@@ -163,6 +186,8 @@ class ChatExchange(Record):
 
 class ChatResponse(ChatExchange):
     session_id: str
+    analytics: CoachContext | None = None
+    practice_concept_id: str | None = None
 
 
 class Flashcard(Record):
@@ -177,9 +202,16 @@ class PracticeCounts(Record):
     submitted_answers: int = 0
     unique_questions_seen: int = 0
     accepted_observations: int = 0
+    review_attempts: int = 0
+    focus_observations: int = 0
+    lifetime_evidence: int = 0
 
 
 class SessionResponse(Record):
+    analytics: CoachContext | None = None
+    session_kind: Literal["diagnostic", "focus"] = "diagnostic"
+    focus_concept_id: str | None = None
+    practice_notice: str = ""
     session_id: str
     course_id: str | None = None
     question: PublicQuestion
@@ -191,6 +223,7 @@ class SessionResponse(Record):
 
 
 class TurnResponse(Record):
+    analytics: CoachContext | None = None
     session_id: str
     assessment: PublicAssessment
     concepts: list[ConceptEstimate]

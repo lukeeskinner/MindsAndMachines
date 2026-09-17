@@ -73,7 +73,8 @@ class DynamoStoreTests(unittest.TestCase):
         data = json.loads(self.store._table.items[session_id]["data"])
         self.assertEqual(set(data), {"question_id", "learner_state", "history", "user_id", "course_id",
                                      "remediation_focus", "generated_questions", "chat_history",
-                                     "profile_id", "session_start", "budget", "current_review"})
+                                     "profile_id", "session_start", "budget", "current_review",
+                                     "session_kind", "focus_concept_id", "focus_question_ids"})
 
     def test_legacy_session_without_course_id_still_loads(self):
         session_id = self.store.new_session("q1", LearnerState(skills={}))

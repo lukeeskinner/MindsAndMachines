@@ -1,4 +1,107 @@
 {
+  "analytics": {
+    "session_complete": false,
+    "session_kind": "diagnostic",
+    "focus_ranking": [
+      {
+        "concept_id": "admissibility_vs_consistency",
+        "concept_name": "Admissibility Vs Consistency",
+        "focus_priority": 0.704497,
+        "mastery_mean": 0.3333333333333333,
+        "interval90": {
+          "lower": 0.0253,
+          "upper": 0.7764
+        },
+        "evidence_count": 1,
+        "unseen_questions": 6,
+        "reasons": [
+          "low_mastery",
+          "high_uncertainty",
+          "limited_evidence"
+        ]
+      },
+      {
+        "concept_id": "admissibility",
+        "concept_name": "Admissibility",
+        "focus_priority": 0.695,
+        "mastery_mean": 0.5,
+        "interval90": {
+          "lower": 0.05,
+          "upper": 0.95
+        },
+        "evidence_count": 0,
+        "unseen_questions": 0,
+        "reasons": [
+          "high_uncertainty",
+          "limited_evidence"
+        ]
+      },
+      {
+        "concept_id": "astar",
+        "concept_name": "Astar",
+        "focus_priority": 0.695,
+        "mastery_mean": 0.5,
+        "interval90": {
+          "lower": 0.05,
+          "upper": 0.95
+        },
+        "evidence_count": 0,
+        "unseen_questions": 0,
+        "reasons": [
+          "high_uncertainty",
+          "limited_evidence"
+        ]
+      },
+      {
+        "concept_id": "bfs",
+        "concept_name": "Bfs",
+        "focus_priority": 0.695,
+        "mastery_mean": 0.5,
+        "interval90": {
+          "lower": 0.05,
+          "upper": 0.95
+        },
+        "evidence_count": 0,
+        "unseen_questions": 0,
+        "reasons": [
+          "high_uncertainty",
+          "limited_evidence"
+        ]
+      },
+      {
+        "concept_id": "consistency",
+        "concept_name": "Consistency",
+        "focus_priority": 0.695,
+        "mastery_mean": 0.5,
+        "interval90": {
+          "lower": 0.05,
+          "upper": 0.95
+        },
+        "evidence_count": 0,
+        "unseen_questions": 0,
+        "reasons": [
+          "high_uncertainty",
+          "limited_evidence"
+        ]
+      },
+      {
+        "concept_id": "ucs",
+        "concept_name": "Ucs",
+        "focus_priority": 0.695,
+        "mastery_mean": 0.5,
+        "interval90": {
+          "lower": 0.05,
+          "upper": 0.95
+        },
+        "evidence_count": 0,
+        "unseen_questions": 0,
+        "reasons": [
+          "high_uncertainty",
+          "limited_evidence"
+        ]
+      }
+    ]
+  },
   "session_id": "example-session",
   "assessment": {
     "outcome": "incorrect",
@@ -115,7 +218,10 @@
   "counts": {
     "submitted_answers": 1,
     "unique_questions_seen": 2,
-    "accepted_observations": 1
+    "accepted_observations": 1,
+    "review_attempts": 0,
+    "focus_observations": 0,
+    "lifetime_evidence": 1
   },
   "session_start": [
     {
