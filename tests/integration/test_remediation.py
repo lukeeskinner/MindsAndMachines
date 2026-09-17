@@ -71,7 +71,11 @@ class RemediationIntegrationTests(unittest.TestCase):
         self.calls.append(data)
         if data.get("task") == "targeted_remediation":
             self.assertIn("response_schema", kwargs)
-            output = proposal_for(data)
+            proposal = proposal_for(data)
+            output = {"prompt": proposal["prompt"],
+                      "wrong_option_1": proposal["choices"][1]["text"],
+                      "wrong_option_2": proposal["choices"][2]["text"],
+                      "wrong_option_3": "The result requires no relationship to the original inputs."}
         elif "trusted_outcome" in data:
             output = {"misconception_id": None, "feedback": "Review the conditions in the reading."}
         else:
@@ -108,6 +112,8 @@ class RemediationIntegrationTests(unittest.TestCase):
         focus = stored.remediation_focus
         refs = grounding(build_runtime_catalog(self.registry.get(self.course["course_id"])), focus)
         self.assertEqual([s["quote"] for s in targeted[0]["sources"]], [r.quote for r in refs.values()])
+        self.assertIn(targeted[0]["assigned_answer"], next(iter(refs.values())).quote)
+        self.assertEqual(record.question.choices[0].text, targeted[0]["assigned_answer"])
         self.assertNotIn(other["course_id"], json.dumps(targeted))
         for untouched in (peer, other):
             self.assertEqual(self.store.load_session(untouched["session_id"]), before[untouched["session_id"]])
@@ -153,6 +159,21 @@ class RemediationIntegrationTests(unittest.TestCase):
                 self.assertTrue(all(s.evidence_count == 0 for s in stored.learner_state.skills.values()))
             if mode in {"fake", "local"}:
                 self.provider.assert_not_called()
+
+    def test_generator_cannot_override_server_assigned_answer_or_citation(self):
+        def respond(prompt, **kwargs):
+            result = self.respond(prompt, **kwargs)
+            if json.loads(prompt).get("task") == "targeted_remediation":
+                output = json.loads(result.text)
+                output.update({"correct_choice_id": "b", "rubric": "Invented grounding"})
+                result.text = json.dumps(output)
+            return result
+        self.provider.side_effect = respond
+        session = self.start()
+        with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+            result = self.answer(session)
+        self.assertEqual(result.status_code, 200)
+        self.assertFalse(self.store.load_session(session["session_id"]).generated_questions)
 
     def test_consecutive_replacements_preserve_answered_history_keys_and_provenance(self):
         def fresh_response(prompt, **kwargs):

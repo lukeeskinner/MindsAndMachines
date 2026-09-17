@@ -94,6 +94,9 @@ class ProcessingMetadata:
     provider_calls: int
     warnings: tuple[str, ...]
     requires_review: bool = True
+    degraded: bool = False
+    discarded_question_count: int = 0
+    repaired_question_count: int = 0
 
 
 @dataclass(frozen=True)

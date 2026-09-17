@@ -116,25 +116,39 @@ MODEL_PROVIDER=bedrock python3 -m backend.app.ingestion \
   --mode bedrock --title 'Graph search' lecture5.pdf
 ```
 
-Bedrock now returns a compact question plan referencing server-created source
-passages and answer snippets by ID. Its schema enumerates valid IDs and requires
-`first_question` / `second_question`, each with `prompt`, `answer_id` and three
+Bedrock returns a compact question plan referencing server-created source
+passages by ID. Its schema enumerates valid passage IDs and requires
+`first_question` / `second_question`, each with `prompt` and three
 string fields `wrong_option_1` / `wrong_option_2` / `wrong_option_3`. These required
-fields encode cardinality without relying only on array-size instructions. It writes the question prompts and distractors;
+fields encode cardinality without relying only on array-size instructions.
+The server assigns an exact source answer to each of the five possible question
+slots and includes those assignments under `question_answers` in the request.
+The model writes the question prompts and distractors for those answers;
 it does not write citations, correct-choice text, answer indices or explanations.
 A forced Bedrock tool response carries the plan as a structured object rather
 than JSON embedded in prose. This is only an output envelope: no tool action is
 executed and no tool-result or second inference call is sent. The server rejects
 missing, multiple, mismatched or truncated tool responses. The server resolves
-IDs only against this upload, supplies exact source evidence,
-and runs the existing artifact validators. Unknown/duplicate passage IDs,
-cross-passage answers, extra fields and ambiguous distractors are rejected.
+passage IDs only against this upload, inserts each slot's trusted answer and exact
+source evidence, and runs the existing artifact validators. The model cannot
+supply answer IDs or override the slot assignment. Unknown/duplicate passage IDs,
+extra fields and ambiguous distractors are rejected.
 
 Passages are contiguous normalized source windows of at most 800 characters.
 Their labels use a short source heading where available, otherwise the first
 seven words. Answers disclosed by the label are excluded. Candidate answers are source sentences with at least three words;
 answers that would overlap stored guidance are excluded before generation.
-The model selects up to four passages. This remains extractive assessment;
+When at least two numbered topic headings have multiple source sentences, the
+server narrows generation to the first five such sections and requests two
+questions per section through named output slots. Each slot's schema embeds its
+exact source answer, so the model cannot shift a question onto another passage.
+The slot also requires an `assigned_answer_echo`: a copy of the already assigned
+correct option, giving the model a complete multiple-choice shape while it writes
+three wrong alternatives. The server rejects any echo that differs from its
+trusted answer and still inserts the correct choice itself. The echo is never
+used as grading authority or exposed as a public field. This keeps a broad lecture from collapsing into repeated
+questions about one generic subheading. Unstructured material retains model
+selection of up to five passages. This remains extractive assessment;
 labels and answer snippets are not a semantic curriculum analysis.
 
 Each concept receives the existing three authored process-guidance artifacts:
@@ -145,28 +159,88 @@ IDs and review flags are assigned in code; all artifacts still pass answer-leaka
 checks. Runtime Bedrock Tutor personalization remains unchanged. See
 [runtime catalog](../teaching/RUNTIME_CATALOG.md) for its limits and draft notices.
 
-There is exactly one provider call with a 6,000-token output budget. It explicitly
+Generation starts with one provider call with a 6,000-token output budget. It explicitly
 uses `purpose="course_ingestion"`: `BEDROCK_INGESTION_TIMEOUT_SECONDS` defaults to
 60 seconds and accepts values above zero up to 90. Interactive assessment/Tutor
 calls retain `BEDROCK_TIMEOUT_SECONDS` (default 12, maximum 15) and their existing
 stage budgets. An enclosing provider deadline still caps either purpose; SDK
-retries remain disabled. Generation selects 1–4 passages and writes exactly two
-questions each, at most eight total. No retries, repair calls, provider switching, or
-automatic local fallback occur. Malformed/unsupported output and provider failures
-raise `IngestionError`; callers may explicitly request a separate local run.
+retries remain disabled. Generation selects 1–5 passages and writes 2–5 questions
+per passage, aiming for 5–10 questions total. Ten slots is the hard upper bound;
+shorter valid banks are accepted. Invalid question slots permit exactly one
+question-only repair. Question schemas, answer references, negative stems,
+answer leakage, duplicate choices/content and source-overlapping distractors are
+checked independently for each slot, using the existing validators.
+Distractors are checked case-insensitively against both their assigned evidence
+and the whole concept passage. A terminal prose punctuation change cannot hide
+a source formula; mathematical operators remain significant. These checks reject
+copied true alternatives, but do not prove that an arbitrary paraphrase is false.
+The initial and repair instructions require exactly one objectively correct answer,
+precise positive stems, distinct/non-equivalent choices and no repeated question
+semantics within a concept. These are generation requirements, not claims of
+semantic proof by the lexical validators.
+`course_ingestion_ready` reports concept/question counts, provider-call count,
+and repaired/discarded counts without logging source text or model output.
+
+The repair request includes the original plan, trusted passages/slot answers, and
+machine-readable `revision.failures` and `revision.repair_targets`. `repair_slots`
+also pairs each target directly with its source topic, passage and assigned answer;
+the model need not reconstruct those bindings from array indices. Each failure
+identifies a JSON-pointer question path, a reason, and either the original duplicate
+question path, overlapping distractor field/rule or matched negative-stem keyword.
+Failures are collected across resolution and validation for the same repair attempt. The response
+must be exactly `{"repairs": [{"question_id": "<target path>", "question": {...}}]}`,
+covering every target once. Missing, repeated, foreign and extra routing fields
+invalidate the repair envelope; the initial valid bank remains available. Question
+contents are validated per slot, so one malformed repair does not discard other
+successful repairs. The server overlays only targeted question wording; it preserves
+all originally valid questions, passage assignments, source IDs and slot answers.
+It resolves the original slots before filtering, so removing a question cannot
+shift another question's answer assignment. An earlier repaired duplicate cannot
+displace an originally valid later question.
+Unknown/duplicate passage IDs and duplicate concepts fail without regeneration.
+Both calls share a 90-second total deadline. An invalid question remaining after
+repair is discarded, never exposed. A repair provider failure or deadline retains
+the valid initial questions. Every surviving question and the complete surviving
+bank pass all content/source/disclosure validators before registration. A concept
+with no usable grounded question rejects the entire course; concepts are not silently
+dropped. Initial malformed course structure, unknown source references, invalid
+trusted answers and teaching/source integrity errors also remain fatal.
+
+Runtime minimum: one concept, at least one usable question per concept, and all
+three validated teaching kinds per concept. Runtime catalogs, freshness and policy
+already support variable counts and transition/complete on exhaustion. Targeted
+remediation replaces an existing fresh slot; it cannot replenish an exhausted
+one-question concept. No runtime changes were made for partial acceptance.
+
+Private metadata records actual `provider_calls`, `degraded`,
+`discarded_question_count` and `repaired_question_count`; a failed repair is never
+reported as successful. The HTTP response includes only the accepted question count,
+not private diagnostics. No provider switching or invented fallback questions occur.
+Logs include fixed failure codes, server-generated slot paths and allowlisted
+keywords, never question/source text or raw model output.
 Model output can vary between runs; this branch does not claim Bedrock determinism.
 
-The model receives request-scoped passage/answer IDs and their exact text, without
+The model receives request-scoped passage IDs and slot-assigned answer text, without
 filenames, internal chunk IDs or location metadata. A single complete outer Markdown fence (JSON or unlabeled) is accepted;
 surrounding prose and multiple blocks are not. Its contents still undergo all
 validation. Strict JSON requires exact keys/types, bounded nonempty lists/text,
 and no duplicate object keys or NaN/Infinity. Extra ID/provenance fields are
 rejected. Concepts require unique names and source-verbatim names/summaries.
-Questions require distinct prompts/choices, an integer answer index, their
+Questions require distinct choices, an integer answer index, their
 concept name in the prompt, and known nonempty source references. Every quote
 must occur in the cited chunk. Correct answer text and explanation must occur
 in a shared evidence quote from one of the concept's source chunks. Distractors
-appearing verbatim in evidence are rejected as ambiguous for this extractive MVP.
+appearing verbatim (case-sensitive, after whitespace normalization) in any cited
+evidence quote are rejected as ambiguous for this extractive MVP. For generated
+plans that quote is the server-assigned correct answer itself. This rule detects
+substring overlap, not semantic equivalence, vague stems or answer-reference mismatch.
+Repeated multiple-choice stems are allowed when the choice sets differ. A repeated
+stem with the same choices is rejected as `duplicate_question_content`, ignoring
+case, whitespace and option order. This prevents correct-slot rotation from
+disguising a copied question. Generation still requests distinct, specific prompts;
+duplicate content triggers the bounded repair above. Remaining invalid slots are
+omitted with private degraded-generation metadata; they are never made unique by
+adding an arbitrary number to the prompt.
 
 These checks detect some unsupported answers and references; they cannot prove
 that a prompt entails its answer, that distractors are false, that course coverage

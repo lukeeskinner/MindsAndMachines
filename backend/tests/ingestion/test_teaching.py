@@ -99,7 +99,7 @@ class TeachingIngestionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(course.metadata.provider_calls, 1)
         self.assertTrue(course.concepts and course.questions and course.teaching)
         self.assertEqual({t.kind for t in course.teaching}, set(PROCESS_TEMPLATES))
-        self.assertIn("answer_id", SYSTEM)
+        self.assertIn("question_answers", SYSTEM)
         self.assertEqual(set(json.loads(self.complete.call_args.args[0])), {"passages"})
         self.assertEqual(self.complete.call_args.kwargs["max_tokens"], 6000)
         self.assertEqual(self.complete.call_args.kwargs["purpose"], "course_ingestion")

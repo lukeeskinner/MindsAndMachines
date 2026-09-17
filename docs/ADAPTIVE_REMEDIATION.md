@@ -65,11 +65,17 @@ generator; no production diagnosis is invented.
 `TargetedQuestionGenerator` calls the existing `provider.complete` abstraction at
 most once with a strict structured-output schema. It receives only active-concept
 source references from the active course, prior server question/key/rubric,
-submitted answer, trusted assessment/focus and existing prompts. It generates one
-prompt, choices, key selection and source reference. Server code mints a unique ID,
-assigns course/concept, supplies the reserved non-correct unsure option and retains
-the private source-backed rubric. Model output cannot set session, course,
+submitted answer, trusted assessment/focus and existing prompts. The server assigns
+an exact source answer, preferring a complete sentence different from the prior
+answer where possible. The model returns only a prompt and three distractors.
+Server code inserts the assigned answer, grading key, reference and rubric, mints
+a unique ID, assigns course/concept and supplies the reserved non-correct unsure
+option. Model output cannot set grading or source authority, session, course,
 concept, focus, policy or estimates.
+
+The diagnostic log `targeted_question_result reason=...` reports acceptance,
+timeout, provider failure or validation rejection without logging source text,
+private answers, prompts or raw exceptions.
 
 Validation rejects extra/duplicate JSON fields, non-JSON constants, invalid types,
 empty/oversized text, duplicate choice IDs/text, invalid keys, foreign references,

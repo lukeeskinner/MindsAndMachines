@@ -75,10 +75,11 @@ The screen rounds percentages to one decimal; the API returns Bayesian estimates
 
 ## Manual live assessment and Tutor test
 
-From a developer shell with the workshop's temporary AWS credentials already exported:
+From a developer shell with `AWS_PROFILE=workshop` set for the configured local
+workshop profile (omit it when using credentials exported directly in the shell):
 
 ```sh
-MODEL_PROVIDER=bedrock AWS_REGION=us-east-1 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0 BEDROCK_TIMEOUT_SECONDS=12 make dev
+AWS_PROFILE=workshop MODEL_PROVIDER=bedrock AWS_REGION=us-east-1 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0 BEDROCK_TIMEOUT_SECONDS=12 BEDROCK_INGESTION_TIMEOUT_SECONDS=60 DYNAMODB_TABLE_NAME= make dev
 ```
 
 Open [the learning lab](http://127.0.0.1:5173) and follow the first-answer walkthrough. Accepted Bedrock prose shows **AI-generated teaching**; provider timeout/error or rejected output shows **Reviewed fallback**, with the same policy-selected next question. Completion is authored even in Bedrock mode. `MODEL_PROVIDER=fake` (the default) or `local` never invokes the provider through Assessment or Tutor. Selected files remain local until **Upload course**; uploaded content is processed by the backend, and course Tutor personalization receives the selected artifact's display-safe grounding.
@@ -98,14 +99,27 @@ update the session. SDK socket deadlines are set and retries disabled. No provid
 switching or whole-turn retries occur. Do not store credentials in repository
 files. `make check` and `make smoke` use mocked/local providers, never live AWS.
 
-Course generation is a larger, separate upload request. Its single provider call
+Course generation is a larger, separate upload request. Each provider call
 uses `BEDROCK_INGESTION_TIMEOUT_SECONDS`, default 60 seconds, allowed above zero up
-to 90. The upload browser timeout stays 120 seconds. This does not extend tutoring
-deadlines or add retries. The provider attempt log includes
+to 90. Source answers are assigned to question slots by the server; the model
+writes prompts and distractors without returning answer IDs. Duplicate questions,
+misleading negative stems, or source-overlapping distractors permit one targeted
+repair with machine-readable question paths and failure reasons. The server applies
+only those question patches, preserves valid questions and source assignments, and
+revalidates the surviving bank. A question still invalid after repair is omitted;
+the course is accepted only if every concept retains at least one usable grounded
+question. Private metadata records degraded generation and repaired/discarded counts.
+Both attempts share a 90-second total generation deadline. A failed or malformed
+repair can preserve the valid initial bank; initial provider failures, invalid
+passage IDs, duplicate concepts, and trusted source/answer integrity failures remain
+fatal. The upload browser timeout stays 120 seconds,
+and tutoring deadlines are unchanged. The provider attempt log includes
 `timeout_seconds='60' purpose=course_ingestion` with the default configuration.
 
 For a live failure diagnosis, stop the existing dev launcher with Ctrl-C and run
-the command above again (the backend does not hot-reload). The backend terminal
+the command above again. Set `BACKEND_RELOAD=1` to reload backend and contract
+Python changes automatically during development (this resets in-memory sessions).
+The backend terminal
 logs `runtime_start` with PID and provider/model configuration, `provider_attempt`,
 `bedrock_converse_started`, `bedrock_response_received` with an allowlisted stop
 reason, and `provider_returned` on success. `provider_failed` distinguishes timeout,

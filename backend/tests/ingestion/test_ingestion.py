@@ -1,3 +1,4 @@
+import asyncio
 import copy
 from dataclasses import FrozenInstanceError, replace
 import hashlib
@@ -16,6 +17,8 @@ from backend.app.agents.provider import ProviderError, ProviderResult
 from backend.app.ingestion import IngestionError, extract_material, process_course
 from backend.app.ingestion.extraction import P, R
 from backend.app.ingestion.pipeline import _local_proposal, validate_proposal
+from backend.app.ingestion.passages import (apply_repairs, build_passages, resolve_plan,
+                                           FORBIDDEN_STEM_WORDS, REPAIR_SYSTEM, SYSTEM)
 from backend.tests.ingestion.helpers import plan_for
 
 
@@ -218,6 +221,26 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(IngestionError, "Duplicate question"):
             self.validate(value)
 
+    def test_shared_prompt_with_distinct_choices_is_not_a_duplicate(self):
+        questions = self.proposal["concepts"][0]["questions"]
+        questions[1]["prompt"] = questions[0]["prompt"]
+        _, validated = self.validate()
+        self.assertEqual(validated[0].prompt, validated[1].prompt)
+        self.assertNotEqual(validated[0].choices, validated[1].choices)
+        self.assertNotEqual(validated[0].question_id, validated[1].question_id)
+
+    def test_duplicate_choices_cannot_be_disguised_by_order_case_or_whitespace(self):
+        first = self.proposal["concepts"][0]["questions"][0]
+        duplicate = copy.deepcopy(first)
+        duplicate["prompt"] = "  " + first["prompt"].upper().replace(" ", "\n ")
+        duplicate["choices"] = list(reversed(first["choices"]))
+        duplicate["answer_index"] = len(first["choices"]) - 1 - first["answer_index"]
+        # Keep the source-verbatim correct answer; vary only a distractor.
+        duplicate["choices"][0] = "  " + duplicate["choices"][0].upper().replace(" ", "\n ")
+        self.proposal["concepts"][0]["questions"][1] = duplicate
+        with self.assertRaisesRegex(IngestionError, "Duplicate question"):
+            self.validate()
+
     def test_evidence_must_intersect_concept_sources(self):
         value = copy.deepcopy(self.proposal)
         value["concepts"][0]["questions"][0]["source_refs"] = value["concepts"][1]["source_refs"]
@@ -285,7 +308,7 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.metadata.provider_calls, 1)
         self.assertEqual(result.materials, materials)
         payload = json.loads(self.call.call_args.args[0])
-        self.assertTrue(all(set(source) == {"passage_id", "label", "text", "answers"} for source in payload["passages"]))
+        self.assertTrue(all(set(source) == {"passage_id", "label", "text", "question_answers"} for source in payload["passages"]))
         self.assertNotIn("course.pdf", self.call.call_args.args[0])
 
     async def test_provider_errors_and_malformed_output_raise_without_retry_or_fallback(self):
@@ -299,6 +322,197 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(caught.exception.materials), 2)
                 self.assertNotIn("private raw error", str(caught.exception))
                 self.call.assert_awaited_once()
+
+    async def test_duplicate_bank_gets_one_validated_revision(self):
+        materials = tuple(extract_material(path) for path in self.paths)
+        valid = plan_for(materials)
+        duplicate = copy.deepcopy(valid)
+        duplicate["concepts"][0]["additional_questions"].append(duplicate["concepts"][0]["first_question"].copy())
+        target = "/concepts/0/additional_questions/0"
+        replacement = {**duplicate["concepts"][0]["first_question"],
+                       "prompt": "Which statement explains how breadth-first search orders node expansion?"}
+        repairs = {"repairs": [{"question_id": target, "question": replacement}]}
+        self.call.side_effect = [ProviderResult(json.dumps(p), "bedrock", "mock", 0)
+                                 for p in (duplicate, repairs)]
+        with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+            course = await process_course(self.paths)
+        self.assertEqual(self.call.await_count, 2)
+        self.assertEqual(course.metadata.provider_calls, 2)
+        revised = json.loads(self.call.call_args.args[0])
+        self.assertEqual(revised["rejected_plan"], duplicate)
+        self.assertEqual(revised["revision"], {"repair_targets": [target], "failures": [{
+            "question_id": target, "reason": "duplicate_question_content",
+            "duplicate_of": "/concepts/0/first_question"}]})
+        self.assertEqual(self.call.call_args.kwargs["system"], REPAIR_SYSTEM)
+        repair_items = self.call.call_args.kwargs["response_schema"]["properties"]["repairs"]["items"]
+        self.assertEqual(repair_items["properties"]["question_id"]["enum"], [target])
+        self.assertEqual(len(course.questions), sum(2 + len(c["additional_questions"]) for c in duplicate["concepts"]))
+        expected = copy.deepcopy(duplicate)
+        expected["concepts"][0]["additional_questions"][0] = replacement
+        self.assertEqual(apply_repairs(duplicate, repairs, [target]), expected)
+        # All existing question IDs/content and source records survive the repair.
+        _, untouched = validate_proposal(json.dumps(resolve_plan(valid, build_passages(materials))), materials, course.course_id)
+        self.assertTrue(set(untouched).issubset(set(course.questions)))
+        self.assertEqual(course.materials, materials)
+
+    async def test_ambiguous_question_gets_one_validated_targeted_repair(self):
+        materials = tuple(extract_material(path) for path in self.paths)
+        valid = plan_for(materials)
+        ambiguous = copy.deepcopy(valid)
+        ambiguous["concepts"][0]["second_question"]["wrong_option_2"] = "frontier of nodes"
+        target = "/concepts/0/second_question"
+        repairs = {"repairs": [{"question_id": target, "question": valid["concepts"][0]["second_question"]}]}
+        self.call.side_effect = [ProviderResult(json.dumps(p), "bedrock", "mock", 0)
+                                 for p in (ambiguous, repairs)]
+        with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+            course = await process_course(self.paths)
+        self.assertEqual(self.call.await_count, 2)
+        revision = json.loads(self.call.call_args.args[0])["revision"]
+        self.assertEqual(revision, {"repair_targets": [target], "failures": [{
+            "question_id": target, "reason": "ambiguous_question", "field": "wrong_option_2",
+            "rule": "wrong_option_is_substring_of_evidence"}]})
+        expected = validate_proposal(json.dumps(resolve_plan(valid, build_passages(materials))), materials, course.course_id)
+        self.assertEqual((course.concepts, course.questions), expected)
+
+    async def test_one_revision_collects_negative_duplicate_and_ambiguity_failures(self):
+        materials = tuple(extract_material(path) for path in self.paths)
+        plan = plan_for(materials)
+        plan["concepts"][0]["additional_questions"].append(copy.deepcopy(plan["concepts"][0]["first_question"]))
+        valid_second = copy.deepcopy(plan["concepts"][0]["second_question"])
+        plan["concepts"][0]["second_question"]["wrong_option_2"] = "frontier of nodes"
+        valid_other = copy.deepcopy(plan["concepts"][1]["first_question"])
+        plan["concepts"][1]["first_question"]["prompt"] = "Which explanation corrects this misunderstanding?"
+        repairs = {"repairs": [
+            {"question_id": "/concepts/1/first_question", "question": valid_other},
+            {"question_id": "/concepts/0/second_question", "question": valid_second},
+            {"question_id": "/concepts/0/additional_questions/0", "question": {
+                **plan["concepts"][0]["first_question"],
+                "prompt": "Which statement describes the node expansion order of breadth-first search?"}}]}
+        self.call.side_effect = [ProviderResult(json.dumps(p), "bedrock", "mock", 0) for p in (plan, repairs)]
+        with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+            course = await process_course(self.paths)
+        failures = json.loads(self.call.call_args.args[0])["revision"]["failures"]
+        self.assertEqual({f["reason"] for f in failures},
+                         {"negative_question", "duplicate_question_content", "ambiguous_question"})
+        self.assertEqual(course.metadata.provider_calls, 2)
+
+    async def test_revision_is_bounded_and_still_rejects_invalid_content(self):
+        materials = tuple(extract_material(path) for path in self.paths)
+        duplicate = plan_for(materials)
+        duplicate["concepts"][0]["additional_questions"].append(duplicate["concepts"][0]["first_question"].copy())
+        target = "/concepts/0/additional_questions/0"
+        original = duplicate["concepts"][0]["first_question"]
+        ambiguous = {**original, "prompt": "Which claim describes the search frontier?", "wrong_option_1": "search"}
+        unsupported = {**original, "answer_id": "invented"}
+        for question, error in ((original, "Duplicate question"), (ambiguous, "ambiguous"),
+                                (unsupported, "unexpected fields")):
+            self.call.reset_mock()
+            revision = {"repairs": [{"question_id": target, "question": question}]}
+            self.call.side_effect = [ProviderResult(json.dumps(p), "bedrock", "mock", 0)
+                                     for p in (duplicate, revision)]
+            with self.subTest(error=error), patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+                course = await process_course(self.paths)
+                self.assertTrue(course.metadata.degraded)
+                self.assertEqual(course.metadata.discarded_question_count, 1)
+                self.assertEqual(course.metadata.repaired_question_count, 0)
+                self.assertEqual(len(course.questions), 8)
+            self.assertEqual(self.call.await_count, 2)
+
+    async def test_ambiguity_remaining_after_revision_is_omitted(self):
+        materials = tuple(extract_material(path) for path in self.paths)
+        plan = plan_for(materials)
+        question = plan["concepts"][0]["second_question"]
+        question["wrong_option_2"] = "frontier of nodes"
+        repairs = {"repairs": [{"question_id": "/concepts/0/second_question", "question": question}]}
+        self.call.side_effect = [ProviderResult(json.dumps(p), "bedrock", "mock", 0) for p in (plan, repairs)]
+        with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+            course = await process_course(self.paths)
+        self.assertEqual(len(course.questions), 7)
+        self.assertTrue(course.metadata.degraded)
+        self.assertFalse(any(c.text == "frontier of nodes" for q in course.questions for c in q.choices))
+        self.assertEqual(self.call.await_count, 2)
+
+    async def test_negative_stem_repair_preserves_slot_and_source(self):
+        materials = tuple(extract_material(path) for path in self.paths)
+        valid = plan_for(materials)
+        plan = copy.deepcopy(valid)
+        plan["concepts"][0]["first_question"]["prompt"] = "Which statement is a common misconception?"
+        target = "/concepts/0/first_question"
+        repairs = {"repairs": [{"question_id": target, "question": valid["concepts"][0]["first_question"]}]}
+        self.call.side_effect = [ProviderResult(json.dumps(p), "bedrock", "mock", 0) for p in (plan, repairs)]
+        with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+            course = await process_course(self.paths)
+        revision = json.loads(self.call.call_args.args[0])["revision"]
+        self.assertEqual(revision["failures"], [{"question_id": target, "reason": "negative_question", "field": "prompt",
+                                               "rule": "forbidden_whole_word_in_prompt",
+                                               "matched_keywords": ["misconception"]}])
+        expected = validate_proposal(json.dumps(resolve_plan(valid, build_passages(materials))), materials, course.course_id)
+        self.assertEqual((course.concepts, course.questions), expected)
+        self.assertEqual(self.call.await_count, 2)
+
+    async def test_positive_rewording_with_forbidden_keyword_is_still_rejected_and_diagnosed(self):
+        materials = tuple(extract_material(path) for path in self.paths)
+        plan = plan_for(materials)
+        plan["concepts"][0]["first_question"]["prompt"] = "Which statement is a common misconception?"
+        repair = {**plan["concepts"][0]["first_question"],
+                  "prompt": "Which accurate statement corrects this misunderstanding?"}
+        response = {"repairs": [{"question_id": "/concepts/0/first_question", "question": repair}]}
+        self.call.side_effect = [ProviderResult(json.dumps(p), "bedrock", "mock", 0) for p in (plan, response)]
+        with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}), \
+                self.assertLogs("uvicorn.error.ingestion", level="INFO") as logs:
+            course = await process_course(self.paths)
+        self.assertTrue(course.metadata.degraded)
+        self.assertFalse(any("misunderstanding" in q.prompt for q in course.questions))
+        self.assertEqual(self.call.await_count, 2)
+        logged = "\n".join(logs.output)
+        self.assertIn("attempt=2 question=/concepts/0/first_question reason=negative_question keywords=misunderstanding", logged)
+        self.assertNotIn(repair["prompt"], logged)
+        self.assertNotIn(build_passages(materials)[0].text, logged)
+
+    def test_repair_cannot_replace_valid_questions_or_provenance(self):
+        materials = tuple(extract_material(path) for path in self.paths)
+        plan = plan_for(materials)
+        before = copy.deepcopy(plan)
+        target = "/concepts/0/first_question"
+        repair = {"question_id": target, "question": plan["concepts"][0]["first_question"]}
+        cases = [plan, {"repairs": []}, {"repairs": [repair, repair]},
+                 {"repairs": [{**repair, "question_id": "/concepts/0/second_question"}]},
+                 {"repairs": [{**repair, "question_id": "/concepts/0/passage_id"}]}]
+        for response in cases:
+            with self.subTest(response=response), self.assertRaises(IngestionError):
+                apply_repairs(plan, response, [target])
+            self.assertEqual(plan, before)
+        with self.assertRaises(IngestionError):
+            apply_repairs(plan, {"repairs": [repair, repair]}, [target, "/concepts/0/second_question"])
+        patched = apply_repairs(plan, {"repairs": [{**repair, "question": {
+            **repair["question"], "source_refs": []}}]}, [target])
+        with self.assertRaises(IngestionError):
+            resolve_plan(patched, build_passages(materials))
+
+    def test_generation_and_repair_require_objective_unique_questions(self):
+        for prompt in (SYSTEM, REPAIR_SYSTEM):
+            self.assertIn("exactly one objectively correct answer", prompt)
+            self.assertIn("distinct and non-equivalent", prompt)
+            self.assertIn("never repeat", prompt)
+            self.assertIn("same question semantics", prompt)
+            self.assertIn("literal keyword rule", prompt)
+            self.assertIn(", ".join(FORBIDDEN_STEM_WORDS), prompt)
+
+    async def test_revision_cannot_extend_overall_generation_deadline(self):
+        materials = tuple(extract_material(path) for path in self.paths)
+        duplicate = plan_for(materials)
+        duplicate["concepts"][0]["additional_questions"].append(duplicate["concepts"][0]["first_question"].copy())
+        async def respond(*args, **kwargs):
+            if self.call.await_count == 1:
+                return ProviderResult(json.dumps(duplicate), "bedrock", "mock", 0)
+            await asyncio.Event().wait()
+        self.call.side_effect = respond
+        with patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}), \
+                patch("backend.app.ingestion.pipeline.GENERATION_BUDGET_SECONDS", .05):
+            course = await process_course(self.paths)
+        self.assertTrue(course.metadata.degraded)
+        self.assertEqual(course.metadata.discarded_question_count, 1)
+        self.assertEqual(self.call.await_count, 2)
 
     async def test_bedrock_does_not_accept_fake_provider_echo(self):
         self.call.return_value = ProviderResult("[fake provider echo] secret", "fake", "fake", 0)

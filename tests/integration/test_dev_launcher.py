@@ -1,11 +1,13 @@
 """Exercise make -> dev.py without starting servers or contacting AWS."""
 import json
 import os
+import runpy
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +28,17 @@ print(json.dumps(launched))
 
 
 class DevLauncherTests(unittest.TestCase):
+    def test_backend_reload_is_opt_in_and_scoped_to_runtime_source(self):
+        for enabled in ("0", "1"):
+            with self.subTest(enabled=enabled), patch.dict(os.environ, {"BACKEND_RELOAD": enabled}), \
+                    patch("subprocess.Popen", return_value=Mock(pid=1234, returncode=0, poll=lambda: 0)) as launch, \
+                    patch("os.killpg"):
+                runpy.run_path(str(ROOT / "scripts/dev.py"), run_name="__main__")
+            command = launch.call_args_list[0].args[0]
+            self.assertEqual("--reload" in command, enabled == "1")
+            if enabled == "1":
+                self.assertEqual(command[-5:], ["--reload", "--reload-dir", "backend/app", "--reload-dir", "contracts"])
+
     def test_make_dev_preserves_backend_configuration_including_default(self):
         with tempfile.TemporaryDirectory() as temporary:
             probe = Path(temporary) / "probe.py"

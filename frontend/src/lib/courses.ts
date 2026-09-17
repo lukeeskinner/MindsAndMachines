@@ -6,7 +6,7 @@ export const courseMessages: Record<CourseFailure, string> = {
   unsupported: "Choose a PDF or PPTX file.",
   invalid_files: "Try fewer files, and check that each is a PDF or PPTX within the size limit.",
   too_large: "These materials are too large. Choose smaller files and try again.",
-  processing: "We couldn’t process these materials. Try a different PDF or PPTX file.",
+  processing: "We couldn’t build a valid study course from these materials. Retry the upload, or try a shorter PDF or PPTX file.",
   service: "The course service is temporarily unavailable. Please try again later.",
   unavailable: "Course upload is unavailable. Your course has not been confirmed ready.",
   missing: "This course is no longer available. The service may have restarted. Upload the materials again or choose the demo.",

@@ -1,6 +1,7 @@
 """Bounded course generation using the existing provider seam, never runtime wiring."""
 import asyncio
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -10,11 +11,15 @@ from .extraction import extract_material
 from .models import (Choice, Concept, IngestionError, ProcessedCourse, ProcessingMetadata,
                      Question, SourceReference, TeachingArtifact, normalized, stable_id)
 from .teaching import PROCESS_TEMPLATES, validate_teaching
-from .passages import SYSTEM, build_passages, plan_schema, resolve_plan
+from .passages import (SYSTEM, REPAIR_SYSTEM, QUESTION_RULES, QuestionValidationError, apply_repairs,
+                       build_passages, plan_schema, question_path, repair_schema, resolve_plan, topic_passages,
+                       fixed_topic_schema, resolve_fixed_topics, repair_slots)
 
 MAX_CONTEXT_CHARS = 24_000
 MAX_CONCEPTS = 5
 MAX_FILES = 8
+GENERATION_BUDGET_SECONDS = 90
+logger = logging.getLogger("uvicorn.error.ingestion")
 
 
 def _object(value, keys):
@@ -73,7 +78,11 @@ def _parse_proposal(text: str):
     return data
 
 
-def _validate_artifacts(text: str, materials: tuple, course_id: str) -> tuple[tuple, tuple, tuple]:
+def _question_signature(prompt, choices):
+    return (prompt.casefold(), tuple(sorted(choice.casefold() for choice in choices)))
+
+
+def _validate_artifacts(text: str, materials: tuple, course_id: str, *, _minimum_questions=1) -> tuple[tuple, tuple, tuple]:
     """Validate proposals and mint all IDs in trusted code. Does not prove semantics."""
     data = _parse_proposal(text)
     _object(data, {"concepts"})
@@ -94,8 +103,8 @@ def _validate_artifacts(text: str, materials: tuple, course_id: str) -> tuple[tu
         return tuple(refs)
 
     concepts, questions, teaching = [], [], []
-    names, prompts, ids = set(), set(), set()
-    for item in _items(data["concepts"], 1, MAX_CONCEPTS):
+    names, question_signatures, ids, failures = set(), {}, set(), []
+    for concept_index, item in enumerate(_items(data["concepts"], 1, MAX_CONCEPTS)):
         _object(item, {"name", "summary", "source_refs", "questions", "teaching"})
         name, summary = _text(item["name"], 100), _text(item["summary"])
         refs = references(item["source_refs"])
@@ -109,7 +118,7 @@ def _validate_artifacts(text: str, materials: tuple, course_id: str) -> tuple[tu
             raise IngestionError("Duplicate concept ID.")
         ids.add(concept_id)
         concepts.append(Concept(concept_id, name, summary, refs))
-        for proposal in _items(item["questions"], 2, 5):
+        for question_index, proposal in enumerate(_items(item["questions"], _minimum_questions, 5)):
             _object(proposal, {"prompt", "choices", "answer_index", "explanation", "source_refs"})
             prompt = _text(proposal["prompt"])
             choices = tuple(_text(choice) for choice in _items(proposal["choices"], 2, 4))
@@ -119,8 +128,17 @@ def _validate_artifacts(text: str, materials: tuple, course_id: str) -> tuple[tu
             if (type(answer) is not int or not 0 <= answer < len(choices)
                     or len({choice.casefold() for choice in choices}) != len(choices)):
                 raise IngestionError("Question choices or answer key are invalid.")
-            if prompt.casefold() in prompts:
-                raise IngestionError("Duplicate question prompt.")
+            # A generic MCQ stem can introduce different sets of statements.
+            # Compare the whole visible item, ignoring option order so rotating
+            # the correct slot cannot disguise a copied question as fresh evidence.
+            signature = _question_signature(prompt, choices)
+            path = question_path(concept_index, question_index)
+            question_failures = []
+            if signature in question_signatures:
+                question_failures.append({"question_id": path, "reason": "duplicate_question_content",
+                                          "duplicate_of": question_signatures[signature]})
+            else:
+                question_signatures[signature] = path
             if name.casefold() not in prompt.casefold():
                 raise IngestionError("Question does not identify its concept.")
             concept_sources = {ref.chunk_id for ref in refs}
@@ -129,9 +147,19 @@ def _validate_artifacts(text: str, materials: tuple, course_id: str) -> tuple[tu
             if not any(ref.chunk_id in concept_sources and choices[answer] in ref.quote
                        and explanation in ref.quote for ref in evidence):
                 raise IngestionError("Question answer and explanation lack shared source evidence.")
-            if any(choice in ref.quote for i, choice in enumerate(choices) if i != answer for ref in evidence):
-                raise IngestionError("Multiple choices appear in source evidence; extractive question is ambiguous.")
-            prompts.add(prompt.casefold())
+            for i, choice in enumerate(choices):
+                # A source-supported alternative remains ambiguous even when it
+                # changes capitalization or quotes another part of the concept.
+                # Ignore a terminal prose mark (e.g. a formula followed by '.'
+                # versus ':' in the source), retaining mathematical operators.
+                if i != answer and any(choice.casefold().rstrip(".!?;:") in ref.quote.casefold()
+                                       for ref in (*evidence, *refs)):
+                    question_failures.append({"question_id": path, "reason": "ambiguous_question",
+                        "field": f"wrong_option_{i + 1 if i < answer else i}",
+                        "rule": "wrong_option_is_substring_of_evidence"})
+            if question_failures:
+                failures.extend(question_failures)
+                continue  # Rejected questions are never minted or returned.
             question_id = stable_id("q", concept_id, prompt, choices, answer,
                                     sorted((ref.chunk_id, ref.quote) for ref in evidence))
             if question_id in ids:
@@ -152,6 +180,10 @@ def _validate_artifacts(text: str, materials: tuple, course_id: str) -> tuple[tu
             teaching_id = stable_id("teaching", concept_id, kind, paragraphs,
                                     sorted((r.chunk_id, r.quote) for r in evidence))
             teaching.append(TeachingArtifact(teaching_id, concept_id, kind, paragraphs, evidence))
+    if failures:
+        message = ("Duplicate question content." if failures[0]["reason"] == "duplicate_question_content"
+                   else "Multiple choices appear in source evidence; extractive question is ambiguous.")
+        raise QuestionValidationError(message, failures)
     # Protect all course answers/rubrics, including overlap across concepts.
     for artifact in teaching:
         concept = next(c for c in concepts if c.concept_id == artifact.concept_id)
@@ -223,14 +255,149 @@ def _complete_local_bank(concepts):
     return {"concepts": concepts}
 
 
+def _inspect_plan(plan, passages, materials, course_id, *, protected_paths=()):
+    """Inspect slots independently; never return unchecked generated questions.
+
+    Structural/source failures remain fatal. The empty-question validation below
+    is only an internal structural audit; _finish_generation enforces runtime
+    minimums before any course can leave this module.
+    """
+    failures = []
+    try:
+        resolved = resolve_plan(plan, passages)
+        paths = [[question_path(ci, qi) for qi in range(len(c["questions"]))]
+                 for ci, c in enumerate(resolved["concepts"])]
+    except QuestionValidationError as exc:
+        resolved, paths, failures = exc.resolved, exc.question_paths, list(exc.failures)
+    structural = {"concepts": [{**c, "questions": []} for c in resolved["concepts"]]}
+    _validate_artifacts(json.dumps(structural), materials, course_id, _minimum_questions=0)
+    slots = [(path, ci, q) for ci, c in enumerate(resolved["concepts"])
+             for path, q in zip(paths[ci], c["questions"], strict=True)]
+    # A repair may not displace an originally valid question by duplicating it.
+    slots.sort(key=lambda slot: slot[0] not in protected_paths)
+    accepted, signatures = {}, {}
+    local_errors = {
+        "Generated text is empty, invalid, or too long.": "invalid_question_format",
+        "Question choices or answer key are invalid.": "invalid_question_choices",
+    }
+    for path, ci, proposal in slots:
+        single = {"concepts": [{**resolved["concepts"][ci], "questions": [proposal]}]}
+        try:
+            _, questions, _ = _validate_artifacts(json.dumps(single), materials, course_id)
+        except QuestionValidationError as exc:
+            failures.extend({**f, "question_id": path} for f in exc.failures)
+            continue
+        except IngestionError as exc:
+            # Source/answer integrity and teaching failures are deliberately not
+            # in this allowlist: they reject the course, rather than being hidden.
+            reason = local_errors.get(str(exc))
+            if reason is None:
+                raise
+            failures.append({"question_id": path, "reason": reason})
+            continue
+        question = questions[0]
+        signature = _question_signature(question.prompt, (c.text for c in question.choices))
+        if signature in signatures:
+            failures.append({"question_id": path, "reason": "duplicate_question_content",
+                             "duplicate_of": signatures[signature]})
+            continue
+        signatures[signature] = path
+        accepted[path] = proposal
+    filtered = {"concepts": [{**c, "questions": [accepted[path] for path in paths[ci] if path in accepted]}
+                             for ci, c in enumerate(resolved["concepts"])]}
+    # Recheck the entire surviving bank, including cross-concept disclosure.
+    artifacts = _validate_artifacts(json.dumps(filtered), materials, course_id, _minimum_questions=0)
+    return artifacts, failures, frozenset(accepted)
+
+
+def _finish_generation(inspection, calls, initial_invalid=()):
+    artifacts, failures, accepted = inspection
+    concepts, questions, _ = artifacts
+    if any(not any(q.concept_id == c.concept_id for q in questions) for c in concepts):
+        raise IngestionError("Every runtime concept needs at least one usable grounded question.")
+    discarded = len({f["question_id"] for f in failures})
+    repaired = len(set(initial_invalid) & accepted)
+    return artifacts, calls, discarded, repaired
+
+
+def _log_question_failures(failures, attempt):
+    for failure in failures:
+        logger.info("course_ingestion_question_rejected attempt=%s question=%s reason=%s keywords=%s",
+                    attempt, failure["question_id"], failure["reason"],
+                    ",".join(failure.get("matched_keywords", [])) or "none")
+
+
+async def _generate_artifacts(passages, materials, course_id):
+    topics = topic_passages(passages)
+    if topics:
+        passages = topics
+    payload = {"passages": [p.public_to_provider() for p in passages]}
+    system = SYSTEM
+    if topics:
+        payload["required_passage_ids"] = [p.passage_id for p in passages]
+        system = ("Write the question wording for EVERY named slot in the structured-response tool. "
+                  "Each slot description contains its topic and EXACT assigned correct answer. "
+                  "Return only the named question objects; no concepts or passage IDs. "
+                  "For each object copy assigned_answer_echo exactly from its schema enum. That is "
+                  "the correct option: ALL THREE wrong_option fields must be false alternatives. "
+                  "Do not copy a question from another slot: each stem must be directly answered "
+                  "by that slot's entire assigned answer. The mandatory answer echo is the only "
+                  "exception to the no-answer-output rule below; it cannot change the server key.\n" + QUESTION_RULES)
+    schema = fixed_topic_schema(passages) if topics else plan_schema(passages)
+    initial, calls, targets = None, 0, []
+    try:
+        async with asyncio.timeout(GENERATION_BUDGET_SECONDS):
+            with provider.call_budget(GENERATION_BUDGET_SECONDS):
+                calls += 1
+                result = await provider.complete(json.dumps(payload, ensure_ascii=True),
+                    system=system, max_tokens=6000, purpose="course_ingestion",
+                    response_schema=schema)
+                if result.provider != "bedrock":
+                    raise IngestionError("Unexpected provider response; course generation rejected.")
+                plan = _parse_proposal(result.text)
+                if topics:
+                    plan = resolve_fixed_topics(plan, passages)
+                initial = _inspect_plan(plan, passages, materials, course_id)
+                if not initial[1]:
+                    return _finish_generation(initial, calls)
+                _log_question_failures(initial[1], 1)
+                targets = list(dict.fromkeys(f["question_id"] for f in initial[1]))
+                logger.info("course_ingestion_revision reason=%s", initial[1][0]["reason"])
+                payload.update(rejected_plan=plan, revision={"failures": initial[1], "repair_targets": targets})
+                payload["repair_slots"] = repair_slots(plan, passages, targets)
+                calls += 1
+                try:
+                    result = await provider.complete(json.dumps(payload, ensure_ascii=True),
+                        system=REPAIR_SYSTEM, max_tokens=6000, purpose="course_ingestion",
+                        response_schema=repair_schema(targets))
+                    if result.provider != "bedrock":
+                        raise IngestionError("Unexpected repair provider response.")
+                    patched = apply_repairs(plan, _parse_proposal(result.text), targets)
+                except (provider.ProviderError, IngestionError):
+                    # An unusable repair envelope has no authority over the valid
+                    # initial bank. Preserve it; do not claim anything was repaired.
+                    logger.info("course_ingestion_repair_unavailable reason=invalid_or_failed_response")
+                    return _finish_generation(initial, calls, targets)
+                inspected = _inspect_plan(patched, passages, materials, course_id,
+                                          protected_paths=initial[2])
+                _log_question_failures(inspected[1], 2)
+                return _finish_generation(inspected, calls, targets)
+    except TimeoutError as exc:
+        if initial is not None:
+            logger.info("course_ingestion_repair_unavailable reason=deadline")
+            return _finish_generation(initial, calls, targets)
+        raise provider.ProviderError("Course generation deadline exceeded") from exc
+
+
 async def process_course(paths: list[str | Path], *, title: str = "Uploaded course",
                          mode: str | None = None) -> ProcessedCourse:
-    """Extract PDF/PPTX, then generate once. Never calls storage or learning runtime.
+    """Extract PDF/PPTX and validate a bounded bank. Never accesses runtime state.
 
     Default mode follows MODEL_PROVIDER (fake if absent); local and fake both
     bypass the provider. Explicit bedrock requires MODEL_PROVIDER=bedrock, keeping
-    provider selection in the existing seam. Failures raise IngestionError without
-    retries, invented content, or a silent fallback.
+    provider selection in the existing seam. Invalid slots permit one repair;
+    remaining invalid slots are omitted only when every concept stays usable.
+    Structural/source failures are fatal. No alternate provider or invented content.
     """
     title = _text(title, 200)
     if not isinstance(paths, (list, tuple)) or not 1 <= len(paths) <= MAX_FILES:
@@ -263,7 +430,11 @@ async def process_course(paths: list[str | Path], *, title: str = "Uploaded cour
     if selected in {"fake", "local"}:
         raw = json.dumps(_local_proposal(materials))
         warnings.append("Local demo templates use up to five distinct source excerpts; they are not a full course analysis.")
-        calls, label = 0, "local"
+        calls, label, discarded, repaired = 0, "local", 0, 0
+        try:
+            concepts, questions, teaching = _validate_artifacts(raw, materials, course_id)
+        except IngestionError as exc:
+            raise IngestionError(str(exc), materials=materials) from exc
     else:
         if sum(len(source["normalized_text"]) for source in sources) > MAX_CONTEXT_CHARS:
             raise IngestionError("Bedrock context exceeds 24,000 characters; split the material before processing.", materials=materials)
@@ -272,20 +443,21 @@ async def process_course(paths: list[str | Path], *, title: str = "Uploaded cour
         except IngestionError as exc:
             raise IngestionError(str(exc), materials=materials) from exc
         try:
-            result = await provider.complete(json.dumps({"passages": [p.public_to_provider() for p in passages]}, ensure_ascii=True),
-                                             system=SYSTEM, max_tokens=6000, purpose="course_ingestion",
-                                             response_schema=plan_schema(passages))
+            (concepts, questions, teaching), calls, discarded, repaired = await _generate_artifacts(passages, materials, course_id)
         except provider.ProviderError as exc:
-            raise IngestionError("Course generation failed at the provider; no retry or fallback was attempted.", materials=materials) from exc
-        if result.provider != "bedrock":
-            raise IngestionError("Unexpected provider response; course generation rejected.", materials=materials)
-        raw, calls, label = result.text, 1, "bedrock"
-    try:
-        if selected == "bedrock":
-            raw = json.dumps(resolve_plan(_parse_proposal(raw), passages))
-            warnings.append("AI-written questions use server-resolved source evidence and authored reading guidance.")
-        concepts, questions, teaching = _validate_artifacts(raw, materials, course_id)
-    except IngestionError as exc:
-        raise IngestionError(str(exc), materials=materials) from exc
+            raise IngestionError("Course generation failed at the provider; no fallback was attempted.", materials=materials) from exc
+        except IngestionError as exc:
+            raise IngestionError(str(exc), materials=materials) from exc
+        label = "bedrock"
+        warnings.append("AI-written questions use server-resolved source evidence and authored reading guidance.")
+        if calls == 2:
+            warnings.append(f"One question repair attempted; {repaired} repaired questions accepted.")
+        if discarded:
+            warnings.append(f"Degraded generation: {discarded} invalid question slots omitted after one repair attempt.")
+            logger.info("course_ingestion_degraded discarded_questions=%s repaired_questions=%s", discarded, repaired)
+        logger.info("course_ingestion_ready concepts=%s questions=%s provider_calls=%s repaired_questions=%s discarded_questions=%s",
+                    len(concepts), len(questions), calls, repaired, discarded)
     return ProcessedCourse(course_id, title, materials, concepts, questions,
-                           ProcessingMetadata("1", label, calls, tuple(warnings)), teaching=teaching)
+                           ProcessingMetadata("1", label, calls, tuple(warnings), degraded=bool(discarded),
+                                              discarded_question_count=discarded, repaired_question_count=repaired),
+                           teaching=teaching)

@@ -55,6 +55,41 @@ class CourseUploadTests(unittest.TestCase):
     def test_pptx_upload_registered_and_public(self):
         self.assert_upload("course.pptx")
 
+    def test_bedrock_pdf_upload_accepts_shared_stems_but_rejects_copied_questions(self):
+        materials = (extract_material(FIXTURES / "course.pdf"),)
+        for copied in (False, True):
+            self.registry._courses.clear()
+            proposal = plan_for(materials)
+            concept = proposal["concepts"][0]
+            first, second = concept["first_question"], concept["second_question"]
+            second["prompt"] = "  " + first["prompt"].upper().replace(" ", "\n ")
+            if copied:
+                second = concept["additional_questions"][0]
+                second["prompt"] = first["prompt"]
+                second.update({key: value for key, value in first.items() if key != "prompt"})
+                second["wrong_option_1"], second["wrong_option_3"] = (
+                    second["wrong_option_3"], second["wrong_option_1"])
+            self.provider.reset_mock()
+            self.provider.side_effect = None
+            self.provider.return_value = ProviderResult(json.dumps(proposal), "bedrock", "mock", 0)
+            with self.subTest(copied=copied), patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+                response = self.client.post("/api/v1/courses", files=[upload("course.pdf")])
+            self.assertEqual(response.status_code, 201, response.text)
+            self.assertEqual(self.provider.await_count, 2 if copied else 1)
+            if copied:
+                course = self.registry.get(response.json()["course_id"])
+                self.assertEqual(len(course.questions), 4)
+                self.assertTrue(course.metadata.degraded)
+                self.assertEqual(course.metadata.discarded_question_count, 1)
+            if not copied:
+                course = self.registry.get(response.json()["course_id"])
+                self.assertEqual(len(course.questions), 5)
+                self.assertEqual(len({q.question_id for q in course.questions}), 5)
+                self.assertEqual(course.questions[0].prompt.casefold(), course.questions[1].prompt.casefold())
+                session = self.client.post("/api/v1/sessions", json={"course_id": course.course_id})
+                self.assertEqual(session.status_code, 201, session.text)
+            self.assertEqual(len(self.registry._courses), 1)
+
     def test_default_app_mounts_upload_and_sessions_with_one_private_registry(self):
         with patch.object(main, "MemoryCourseRegistry", wraps=MemoryCourseRegistry) as factory:
             app = create_app()
@@ -266,6 +301,7 @@ class CourseUploadTests(unittest.TestCase):
     def test_ingestion_diagnostics_identify_validation_without_logging_private_data(self):
         for message, reason in [
             ("Provider returned malformed JSON.", "malformed_generated_json"),
+            ("Duplicate question content.", "duplicate_question_content"),
             ("Question answer and explanation lack shared source evidence.", "answer_source_mismatch"),
             ("Teaching contains a private rubric or correct-choice text.", "teaching_answer_leakage"),
             ("private source prompt credential", "unclassified_validation"),

@@ -193,6 +193,58 @@ class UploadedCourseRuntimeTests(unittest.TestCase):
         self.assertTrue(all(not h.evidence_applied for h in stored.history))
         self.provider.assert_not_called()
 
+    def test_degraded_variable_banks_complete_with_real_runtime_and_flashcards(self):
+        materials = tuple(extract_material(FIXTURES / name) for name in ("course.pdf", "course.pptx"))
+        for shape, expected_count in (("single", 1), ("one_short_concept", 7), ("all_short", 4)):
+            bank = plan_for(materials)
+            if shape == "single":
+                bank["concepts"] = bank["concepts"][:1]
+            repairs = []
+            for ci, concept in enumerate(bank["concepts"]):
+                if shape != "one_short_concept" or ci == 1:
+                    concept["second_question"]["prompt"] = "Which statement is false?"
+                    repairs.append({"question_id": f"/concepts/{ci}/second_question",
+                                    "question": deepcopy(concept["second_question"])})
+            self.provider.reset_mock()
+            self.provider.side_effect = [ProviderResult(json.dumps(p), "bedrock", "mock", 0)
+                                         for p in (bank, {"repairs": repairs})]
+            with self.subTest(shape=shape), patch.dict(os.environ, {"MODEL_PROVIDER": "bedrock"}):
+                uploaded = self.client.post("/api/v1/courses", data={"title": shape},
+                    files=[("files", (name, (FIXTURES / name).read_bytes()))
+                           for name in ("course.pdf", "course.pptx")])
+            self.assertEqual(uploaded.status_code, 201, uploaded.text)
+            public = uploaded.json()
+            self.assert_private_fields_absent(public)
+            self.assertEqual(public["question_count"], expected_count)
+            course = self.registry.get(public["course_id"])
+            self.assertTrue(course.metadata.degraded)
+            self.assertEqual(course.metadata.repaired_question_count, 0)
+            self.assertEqual(self.provider.await_count, 2)
+            self.provider.side_effect = AssertionError("No live model calls during runtime checks")
+            runtime = build_runtime_catalog(course)
+            session = self.start(public)
+            self.assertEqual(len(session["flashcards"]), len(course.concepts))
+            question, seen = session["question"], set()
+            for index in range(expected_count):
+                self.assertNotIn(question["question_id"], seen)
+                seen.add(question["question_id"])
+                private = runtime.question(question["question_id"])
+                answer = private.answer_key if index else next(c.id for c in private.choices
+                    if c.id not in {private.answer_key, "unsure"})
+                result = self.turn(session, question, answer)
+                self.assertEqual(result.status_code, 200, result.text)
+                body = result.json()
+                self.assert_private_fields_absent(body)
+                current = next(c for c in body["concepts"] if c["concept_id"] == question["concept_id"])
+                self.assertGreaterEqual(current["evidence_count"], 1)
+                if index == 0:
+                    self.assertAlmostEqual(current["mean"], 1 / 3)
+                question = body["next_question"]
+            self.assertIsNone(question)
+            self.assertEqual(seen, set(runtime.questions))
+            self.assertEqual(len(self.store.load_session(session["session_id"]).history), expected_count)
+            self.assertEqual(self.provider.await_count, 2)
+
     def test_courses_and_sessions_are_isolated_and_demo_is_unchanged(self):
         first, other = self.upload(), self.upload("course.pdf", "Second course")
         one, same, two = self.start(first), self.start(first), self.start(other)

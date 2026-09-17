@@ -118,7 +118,7 @@ describe("truthful course upload", () => {
     [415, "Choose a PDF or PPTX"],
     [400, "Try fewer files"],
     [413, "too large"],
-    [422, "couldn’t process"],
+    [422, "couldn’t build a valid study course"],
     [500, "temporarily unavailable"],
     [502, "temporarily unavailable"],
     [503, "temporarily unavailable"],
