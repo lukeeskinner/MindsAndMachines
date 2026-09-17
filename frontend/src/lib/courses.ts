@@ -1,5 +1,6 @@
 import type { PublicCourse, SessionResponse } from "../../../contracts/api";
 import { post } from "./api";
+import { withRequestTimeout } from "./requestTimeout";
 
 export type CourseFailure = "unsupported" | "invalid_files" | "too_large" | "processing" | "service" | "unavailable" | "missing";
 export const courseMessages: Record<CourseFailure, string> = {
@@ -46,19 +47,21 @@ export function publicCourse(value: unknown): PublicCourse {
 export function createCourseUploadAdapter(path = "/api/v1/courses"): CourseUploadAdapter {
   return {
     async upload(files, title) {
-      const body = new FormData();
-      files.forEach(file => body.append("files", file));
-      if (title?.trim()) body.append("title", title.trim());
-      const response = await fetch(path, { method: "POST", body, signal: AbortSignal.timeout(120000) });
-      if (!response.ok) {
-        const code = response.status === 413 ? "too_large" : response.status === 415 ? "unsupported"
-          : response.status === 400 ? "invalid_files"
-          : response.status === 404 || response.status === 405 || response.status === 501 ? "unavailable"
-          : response.status === 422 ? "processing" : "service";
-        throw new CourseError(code);
-      }
-      if (response.status !== 201) throw new CourseError("service");
-      return { status: "ready", course: publicCourse(await response.json()) };
+      return withRequestTimeout(120000, async signal => {
+        const body = new FormData();
+        files.forEach(file => body.append("files", file));
+        if (title?.trim()) body.append("title", title.trim());
+        const response = await fetch(path, { method: "POST", body, signal });
+        if (!response.ok) {
+          const code = response.status === 413 ? "too_large" : response.status === 415 ? "unsupported"
+            : response.status === 400 ? "invalid_files"
+            : response.status === 404 || response.status === 405 || response.status === 501 ? "unavailable"
+            : response.status === 422 ? "processing" : "service";
+          throw new CourseError(code);
+        }
+        if (response.status !== 201) throw new CourseError("service");
+        return { status: "ready" as const, course: publicCourse(await response.json()) };
+      });
     },
   };
 }

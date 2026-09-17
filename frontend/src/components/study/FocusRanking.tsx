@@ -10,12 +10,13 @@ export function FocusRanking({ analytics, busy, onPractice }: {
   return <section className="focus-ranking" aria-label="Practice priorities">
     <h3>What needs attention</h3>
     <p>Low estimates and uncertainty both matter. Practice continues your existing learner model.</p>
-    <ol>{analytics.focus_ranking.map(c => <li key={c.concept_id}>
+    {onPractice && <p>A focus set uses up to 3 fresh questions. Availability is checked when you start; any review is labeled and adds no evidence.</p>}
+    <ol>{analytics.focus_ranking.map((c, index) => <li key={c.concept_id}>
       <strong>{c.concept_name}</strong>
       <p>{(c.mastery_mean * 100).toFixed(1)}% estimate · {c.evidence_count} observations</p>
       <p>{c.reasons.map(r => r.replaceAll('_', ' ')).join(' · ')}</p>
       {onPractice && <Button size="sm" variant="secondary" disabled={busy}
-        onClick={() => onPractice(c.concept_id)}>Practice {c.concept_name}</Button>}
+        onClick={() => onPractice(c.concept_id)}>{index === 0 ? `Start ${c.concept_name} focus set` : `Practice ${c.concept_name}`}</Button>}
     </li>)}</ol>
   </section>;
 }

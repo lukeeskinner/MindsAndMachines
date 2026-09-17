@@ -24,9 +24,14 @@ it('starts trusted focus from chat, continues plotted Beta state, and preserves 
   render(<App/>);const user=userEvent.setup();await screen.findByRole('radio',{name:'Source response'});
   await user.click(screen.getByRole('tab',{name:'Chatbot',exact:true}));
   mock.mockResolvedValueOnce(response({session_id:'s1',message:'Give me more practice on my weakest concept.',text:'Composition needs more practice.',teaching_source:'bedrock',practice_concept_id:'chain',analytics:analytics(before)}));
-  await user.type(screen.getByRole('textbox',{name:'Your message'}),'Give me more practice on my weakest concept.');
+  await user.click(screen.getByRole('button',{name:'Give me more practice on my weakest concept.',exact:true}));
+  expect((screen.getByRole('textbox',{name:'Your message'}) as HTMLTextAreaElement).value).toBe('Give me more practice on my weakest concept.');
+  // Older browser engines provide AbortController but no AbortSignal.timeout.
+  vi.stubGlobal('AbortSignal', {});
   await user.click(screen.getByRole('button',{name:'Send',exact:true}));
   const action=await screen.findByRole('button',{name:'Practice this concept',exact:true});
+  expect(mock.mock.calls[1][0]).toBe('/api/v1/chat');
+  expect(screen.queryByRole('alert')).toBeNull();
   mock.mockResolvedValueOnce(response({...session,session_id:'f1',question:{...q,question_id:'fresh',prompt:'Fresh focus question'},question_count:1,session_kind:'focus',focus_concept_id:'chain',practice_notice:'1 fresh question. Your existing learner model continues.'}));
   await user.click(action);await screen.findByText('Fresh focus question');
   expect(JSON.parse(mock.mock.calls[2][1].body)).toEqual({session_id:'s1',concept_id:'chain'});
@@ -59,3 +64,19 @@ it('starts trusted focus from chat, continues plotted Beta state, and preserves 
   expect(JSON.parse(mock.mock.calls[5][1].body).reset_learner).toBe(true);
   expect(screen.getAllByRole('img',{name:/Beta\(1, 1\)/}).length).toBeGreaterThan(0);
 }, 15000);
+
+it('starts the recommended focus directly from the server ID without a chat request, and permits retry after a real failure',async()=>{
+  const session={session_id:'s1',course_id:'course',question:q,concepts:[before],analytics:analytics(before)};
+  mock.mockResolvedValueOnce(response(session));
+  render(<App/>); const user=userEvent.setup(); await screen.findByRole('radio',{name:'Source response'});
+  await user.click(screen.getByRole('tab',{name:'Chatbot',exact:true}));
+  const action=screen.getByRole('button',{name:'Start Composition focus set',exact:true});
+  mock.mockResolvedValueOnce({ok:false,status:503});
+  await user.click(action); await screen.findByRole('alert');
+  expect(JSON.parse(mock.mock.calls[1][1].body)).toEqual({session_id:'s1',concept_id:'chain'});
+  mock.mockResolvedValueOnce(response({...session,session_id:'focus',session_kind:'focus',focus_concept_id:'chain',question:{...q,prompt:'Fresh retry'}}));
+  await user.click(action); await screen.findByText('Fresh retry');
+  expect(mock.mock.calls.map(c=>c[0])).toEqual(['/api/v1/sessions','/api/v1/focus-practice','/api/v1/focus-practice']);
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getAllByRole('img',{name:/Beta\(1, 5\)/}).length).toBeGreaterThan(0);
+});

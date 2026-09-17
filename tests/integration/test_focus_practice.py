@@ -70,13 +70,21 @@ class FocusPracticeTests(unittest.TestCase):
         s=self.start(); q=s['question']; cid=q['concept_id']
         r=self.answer(s,q,self.keys[q['question_id']])
         focus=self.focus(s,cid)
+        profile_id=self.store.load_session(s['session_id']).profile_id
+        self.assertEqual(self.store.load_session(focus['session_id']).profile_id,profile_id)
         self.assertEqual(focus['concepts'],r['concepts'])
         self.assertEqual(focus['session_start'],r['concepts'])
         seen={q['question_id']}; q=focus['question']; before=self.chat(focus)['analytics']
-        for answer_kind in ('correct','wrong','unsure'):
+        for answer_kind, expected in zip(('correct','wrong','unsure'), ((3,1,2),(3,2,3),(3,2,3))):
             self.assertFalse(q['review']); self.assertNotIn(q['question_id'],seen); seen.add(q['question_id'])
             answer=(self.keys[q['question_id']] if answer_kind=='correct' else 'unsure' if answer_kind=='unsure' else next(c['id'] for c in q['choices'] if c['id'] not in (self.keys[q['question_id']], 'unsure')))
+            submitted=q
             r=self.answer(focus,q,answer); q=r['next_question']
+            current=next(c for c in r['concepts'] if c['concept_id']==cid)
+            self.assertEqual((current['alpha'],current['beta'],current['evidence_count']),expected)
+            self.post('turns',{'session_id':focus['session_id'],'question_id':submitted['question_id'],'answer':answer},400)
+            persisted=BayesianLearner().describe(self.store.load_profile(profile_id).state).concepts
+            self.assertEqual([c.model_dump() for c in persisted],r['concepts'])
         self.assertIsNone(q)
         c=next(c for c in r['concepts'] if c['concept_id']==cid)
         self.assertEqual((c['alpha'],c['beta'],c['evidence_count']),(3,2,3))

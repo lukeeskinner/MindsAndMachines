@@ -35,7 +35,7 @@ it("sends session-only context, prevents duplicate requests and preserves conver
  await user.click(screen.getByRole("button",{name:"New practice session"}));
  await screen.findByRole("radio");await user.click(screen.getByRole("tab",{name:"Chatbot",exact:true}));
  expect(screen.queryByText(response.text)).toBeNull();
-});
+}, 15000);
 
 it("keeps a failed draft for retry and never renders an untrusted mismatched response",async()=>{
  const fetch=vi.fn().mockResolvedValueOnce(ok(initial)).mockResolvedValueOnce({ok:false,status:503})

@@ -21,7 +21,7 @@ import { TeachingPreferences } from "./TeachingPreferences";
 import { percent, type StudyEntry } from "./model";
 
 import { FocusRanking } from "./FocusRanking";
-import { post, requestErrorMessage } from "../../lib/api";
+import { post, RequestError, requestErrorMessage } from "../../lib/api";
 
 type Props = {
   analytics?: CoachContext;
@@ -87,7 +87,10 @@ export function StudyChatbot({
       });
       if (result.session_id !== sessionId || result.message !== message ||
           typeof result.text !== "string" || !result.text.trim() ||
-          !["bedrock", "authored"].includes(result.teaching_source)) throw new Error("Invalid chat response");
+          !["bedrock", "authored"].includes(result.teaching_source)) {
+        console.warn("learning_request_failed", { path: "chat", reason: "invalid_response" });
+        throw new RequestError("The tutor returned an invalid response. Your draft is saved; please retry.");
+      }
       if (!mounted.current) return;
       setMessages(previous => [...previous, { ...result, afterAnswerCount: entries.length }]); setDraft("");
     } catch (err) {
