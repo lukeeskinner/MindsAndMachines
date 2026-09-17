@@ -30,6 +30,17 @@ export interface PublicCourse {
 export interface SessionRequest {
   course_id?: string | null;
 }
+export interface ChatRequest {
+  session_id: string;
+  message: string;
+  presentation_preferences?: LearnerPresentationPreferences;
+}
+export interface ChatResponse {
+  session_id: string;
+  message: string;
+  text: string;
+  teaching_source: 'authored' | 'bedrock';
+}
 export interface SessionResponse {
   session_id: string;
   course_id: string | null;

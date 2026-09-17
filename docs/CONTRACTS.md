@@ -71,6 +71,16 @@ Initialization returns both state and display estimates, with evidence_applied f
 
 SWE1 wires dependencies in one place. The fake implementations occupy the same seams as the real ones. A replacement PR changes the module implementation and its tests, not the coordinator's call signature. Any new feature requiring a field or signature change is a separate, explicit contract change reviewed with affected callers; “stable” does not mean silently adding fields.
 
+## Session chat extension
+
+`POST /api/v1/chat` accepts `{session_id, message, presentation_preferences?}` and
+returns `{session_id, message, text, teaching_source: "authored" | "bedrock"}`.
+Messages are nonblank and at most 2,000 characters. Course identity and bounded
+conversation history come from API-owned session storage, never the request.
+Quiz/learner/policy signatures and evidence rules are unchanged. The additive
+Python/TypeScript records and legacy-compatible storage field are documented in
+[session study conversation](CHAT.md). Shared-contract review is required before merge.
+
 ## Tiny HTTP surface
 
 The learning-mode extension adds `question_count: number` and

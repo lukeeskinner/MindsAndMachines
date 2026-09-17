@@ -292,7 +292,7 @@ describe("course activation and isolation", () => {
     expect(within(impact).getByRole("row", { name: "90% uncertainty range 5.0% – 95.0% 2.5% – 77.6%" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Read explanation" }));
     expect(screen.getByRole("region", { name: "Study conversation" }).textContent).toContain("AI-generated teaching");
-    await user.type(screen.getByRole("textbox", { name: "Your follow-up draft" }), "old course draft");
+    await user.type(screen.getByRole("textbox", { name: "Your message" }), "old course draft");
     await user.click(screen.getByRole("tab", { name: "Materials" }));
     vi.mocked(adapter.upload).mockResolvedValueOnce({ status: "ready", course: chemistry });
     await user.click(screen.getByRole("button", { name: "Prepare another course" }));
@@ -301,7 +301,7 @@ describe("course activation and isolation", () => {
     await screen.findByRole("radio", { name: "Answer for Chemical bonds" });
     expect(document.body.textContent).not.toMatch(/Cell membranes|Osmosis|Returned cell explanation|Intro AI/);
     await user.click(screen.getByRole("tab", { name: "Chatbot" }));
-    expect((screen.getByRole("textbox", { name: "Your follow-up draft" }) as HTMLTextAreaElement).value).toBe("");
+    expect((screen.getByRole("textbox", { name: "Your message" }) as HTMLTextAreaElement).value).toBe("");
     await user.click(screen.getByRole("tab", { name: "Materials" }));
     await user.click(screen.getByRole("button", { name: "Use demo course" }));
     await screen.findByRole("radio", { name: demo.question.choices[0].text });

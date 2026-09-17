@@ -1,4 +1,8 @@
 from collections.abc import Callable
+from contextlib import contextmanager
+from dataclasses import replace
+from backend.app.teaching.chat import answer_message
+from backend.app.agents.provider import ProviderError
 from fastapi import APIRouter, Body, Header, HTTPException
 from backend.app.agents.coordinator import Coordinator, IntegrationError, TurnTimeoutError
 from backend.app.auth.cognito import AuthError, cognito_enabled, verify_id_token
@@ -10,13 +14,27 @@ from backend.app.teaching.flashcards import demo_flashcards, course_flashcards
 from backend.app.teaching.remediation import RemediationTurn, rank_flashcards
 from backend.app.ingestion.models import IngestionError
 from backend.app.teaching.runtime_catalog import RuntimeAvailability, RuntimeCatalog, build_runtime_catalog
-from contracts.models import HistoryEntry, SessionRequest, SessionResponse, TurnRequest, TurnResponse
+from contracts.models import ChatRequest, ChatResponse, HistoryEntry, SessionRequest, SessionResponse, TurnRequest, TurnResponse
 
 
 def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catalog: Catalog,
                course_registry: MemoryCourseRegistry,
                course_coordinator: Callable[[RuntimeCatalog, RuntimeAvailability], Coordinator]) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
+
+    active_sessions: set[str] = set()
+
+    @contextmanager
+    def session_request(session_id: str):
+        # Single-process demo: reject overlapping writes instead of queuing a
+        # request with stale question/context. Always release on failure.
+        if session_id in active_sessions:
+            raise HTTPException(409, "A request is already running for this session.")
+        active_sessions.add(session_id)
+        try:
+            yield
+        finally:
+            active_sessions.discard(session_id)
 
     def course_runtime(course_id: str) -> RuntimeCatalog:
         try:
@@ -56,6 +74,10 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
 
     @router.post("/turns", response_model=TurnResponse)
     async def turn(request: TurnRequest) -> TurnResponse:
+        with session_request(request.session_id):
+            return await run_turn(request)
+
+    async def run_turn(request: TurnRequest) -> TurnResponse:
         try:
             session = store.load_session(request.session_id)
         except KeyError:
@@ -112,8 +134,32 @@ def router_for(coordinator: Coordinator, store: MemoryStore | DynamoStore, catal
         store.save_session(request.session_id, Session(
             response.next_question.question_id if response.next_question else None,
             update.state, [*session.history, entry], session.user_id, session.course_id,
-            remediation.focus, generated,
+            remediation.focus, generated, session.chat_history,
         ))
         return response
+
+    @router.post("/chat", response_model=ChatResponse)
+    async def chat(request: ChatRequest) -> ChatResponse:
+        if not request.message.strip():
+            raise HTTPException(422, "Enter a message.")
+        with session_request(request.session_id):
+            try:
+                session = store.load_session(request.session_id)
+            except KeyError:
+                raise HTTPException(404, "Session not found. Start a new session.") from None
+            runtime = course_runtime(session.course_id) if session.course_id is not None else catalog
+            cards = course_flashcards(runtime.course) if isinstance(runtime, RuntimeCatalog) else demo_flashcards()
+            title = runtime.course.title if isinstance(runtime, RuntimeCatalog) else "Intro AI"
+            current_concept = next((q.concept_id for q in runtime.questions.values()
+                                    if q.question_id == session.question_id), None)
+            if session.question_id in session.generated_questions:
+                current_concept = session.generated_questions[session.question_id].question.concept_id
+            try:
+                exchange = await answer_message(request, cards, title, current_concept, session)
+            except ProviderError:
+                raise HTTPException(503, "The tutor is unavailable. Please retry your message.") from None
+            store.save_session(request.session_id, replace(
+                session, chat_history=[*session.chat_history, exchange][-12:]))
+            return ChatResponse(session_id=request.session_id, **exchange.model_dump())
 
     return router

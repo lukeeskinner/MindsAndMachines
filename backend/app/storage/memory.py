@@ -1,7 +1,7 @@
 """Local demo state. Restarting the backend discards every session."""
 from dataclasses import dataclass, field
 from uuid import uuid4
-from contracts.models import HistoryEntry, LearnerState
+from contracts.models import ChatExchange, HistoryEntry, LearnerState
 from backend.app.teaching.remediation import RemediationFocus
 from backend.app.teaching.targeted_questions import GeneratedQuestion
 
@@ -15,6 +15,7 @@ class Session:
     course_id: str | None = None
     remediation_focus: RemediationFocus | None = None
     generated_questions: dict[str, GeneratedQuestion] = field(default_factory=dict)
+    chat_history: list[ChatExchange] = field(default_factory=list)
 
 
 class MemoryStore:

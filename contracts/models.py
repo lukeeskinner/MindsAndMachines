@@ -142,6 +142,24 @@ class SessionRequest(Record):
     course_id: str | None = Field(default=None, min_length=1)
 
 
+class ChatRequest(Record):
+    session_id: str = Field(min_length=1, max_length=100)
+    message: str = Field(min_length=1, max_length=2000)
+    presentation_preferences: LearnerPresentationPreferences = Field(
+        default_factory=LearnerPresentationPreferences
+    )
+
+
+class ChatExchange(Record):
+    message: str
+    text: str
+    teaching_source: Literal["authored", "bedrock"]
+
+
+class ChatResponse(ChatExchange):
+    session_id: str
+
+
 class Flashcard(Record):
     card_id: str
     concept_id: str

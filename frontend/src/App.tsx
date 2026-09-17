@@ -190,7 +190,9 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [studyMode, setStudyMode] = useState<"practice" | "flashcards">("practice");
   const [answer, setAnswer] = useState("");
-  const [busy, setBusy] = useState(true);
+  const [requestBusy, setBusy] = useState(true);
+  const [chatBusy, setChatBusy] = useState(false);
+  const busy = requestBusy || chatBusy;
   const [error, setError] = useState("");
   const [view, setView] = useState("study");
   const [orientation, setOrientation] = useState<"vertical" | "horizontal">(
@@ -201,7 +203,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
   const requestInFlight = useRef(false);
   const focusHeading = useRef<HTMLHeadingElement>(null);
   const latest = entries.at(-1);
-  const focusConcept = question?.concept_id ?? latest?.question.concept_id ?? "";
+  const focusConcept = (reviewing ? latest?.question.concept_id : question?.concept_id) ?? latest?.question.concept_id ?? "";
   const groups = activeCourse
     ? [{ name: "Course concepts", ids: concepts.map(c => c.concept_id) }]
     : demoGroups.map(group => ({ ...group, ids: group.ids.filter(id => concepts.some(c => c.concept_id === id)) }));
@@ -551,6 +553,8 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                 >
                   <StudyChatbot
                     key={sessionId}
+                    sessionId={sessionId}
+                    onBusyChange={value => { requestInFlight.current = value; setChatBusy(value); }}
                     entries={entries}
                     question={question}
                     concepts={concepts}
@@ -662,7 +666,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                               ? "Practice completed. Estimates remain experimental."
                               : "Read the explanation, then try the next question."}
                           </span>
-                          <Button onClick={() => setReviewing(false)}>
+                          <Button onClick={() => { setReviewing(false); if (question) setSelectedConcept(question.concept_id); }}>
                             {complete
                               ? "Session recap"
                               : "Try the next question"}
@@ -739,7 +743,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                               {busy ? (
                                 <>
                                   <LoaderCircle size={16} className="spin" />
-                                  Checking answer
+                                  {chatBusy ? "Tutor replying" : "Checking answer"}
                                 </>
                               ) : (
                                 <>
@@ -753,7 +757,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                         {latest && (
                           <button
                             className="text-button review-link"
-                            onClick={() => setReviewing(true)}
+                            onClick={() => { setReviewing(true); if (latest) setSelectedConcept(latest.question.concept_id); }}
                           >
                             <ArrowLeft size={14} />
                             Revisit the explanation
@@ -1092,7 +1096,7 @@ function LearningWorkspace({ onEditSetup, course, preferences, setPreferences }:
                         >
                           <span className="concept-row-title">
                             {names[concept.concept_id] ?? concept.concept_id}
-                            {concept.concept_id === focusConcept && (
+                            {!complete && concept.concept_id === focusConcept && (
                               <span className="concept-practice-label">
                                 Practicing
                               </span>

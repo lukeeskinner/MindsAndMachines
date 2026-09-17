@@ -296,7 +296,7 @@ describe("study desk interactions", () => {
     });
     await user.click(within(navigation).getByRole("tab", { name: "Chatbot" }));
     const draft = screen.getByRole("textbox", {
-      name: "Your follow-up draft",
+      name: "Your message",
     }) as HTMLTextAreaElement;
     await user.click(
       screen.getByRole("button", { name: "Walk me through the example" }),
@@ -308,11 +308,10 @@ describe("study desk interactions", () => {
     const send = screen.getByRole("button", {
       name: "Send",
     }) as HTMLButtonElement;
-    expect(send.disabled).toBe(true);
-    await user.click(send);
+    expect(send.disabled).toBe(false);
     await user.click(screen.getByRole("tab", { name: "Study desk" }));
     expect(
-      screen.queryByRole("textbox", { name: "Your follow-up draft" }),
+      screen.queryByRole("textbox", { name: "Your message" }),
     ).toBeNull();
     await user.click(screen.getByRole("tab", { name: "Chatbot" }));
     await user.click(screen.getByRole("tab", { name: "Concept map" }));
@@ -327,7 +326,7 @@ describe("study desk interactions", () => {
       expect(
         (
           screen.getByRole("textbox", {
-            name: "Your follow-up draft",
+            name: "Your message",
           }) as HTMLTextAreaElement
         ).value,
       ).toBe(""),
@@ -685,4 +684,22 @@ describe("adaptive evidence and trust", () => {
     });
     expect(fetchMock.mock.calls[3][1].body).toBe("{}");
   });
+});
+
+it("moves the evidence inspector to the next concept and restores it when revisiting feedback", async () => {
+  fetchMock.mockResolvedValueOnce(respond({...fixture, next_question: {
+    question_id: "bfs-next", concept_id: "bfs", prompt: "A fresh BFS question",
+    choices: [{id:"a",text:"Explore by depth"}],
+  }}));
+  const user = await start();
+  await user.click(screen.getByRole("radio", {name:firstQuestion.choices[0].text}));
+  await user.click(screen.getByRole("button", {name:"Check answer"}));
+  await screen.findByRole("button", {name:"Try the next question"});
+  const before = document.querySelector(".concept-detail")!.textContent;
+  await user.click(screen.getByRole("button", {name:"Try the next question"}));
+  expect(document.querySelector(".concept-detail")!.textContent).toContain("BFS");
+  expect(document.querySelector(".concept-detail")!.textContent).not.toBe(before);
+  expect(screen.getByRole("button", {name:"Check answer"}).hasAttribute("disabled")).toBe(true);
+  await user.click(screen.getByRole("button", {name:"Revisit the explanation"}));
+  expect(document.querySelector(".concept-detail")!.textContent).toBe(before);
 });

@@ -9,7 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from backend.app.storage.memory import Session
-from contracts.models import HistoryEntry, LearnerState
+from contracts.models import ChatExchange, HistoryEntry, LearnerState
 from backend.app.teaching.remediation import RemediationFocus
 from backend.app.teaching.targeted_questions import GeneratedQuestion
 
@@ -46,6 +46,7 @@ class DynamoStore:
             user_id=data.get("user_id"),
             course_id=data.get("course_id"),
             remediation_focus=RemediationFocus(**data["remediation_focus"]) if data.get("remediation_focus") else None,
+            chat_history=[ChatExchange(**entry) for entry in data.get("chat_history", [])],
             generated_questions={key: GeneratedQuestion(**value)
                                  for key, value in data.get("generated_questions", {}).items()},
         )
@@ -55,6 +56,7 @@ class DynamoStore:
 
     def _put(self, session_id: str, session: Session) -> None:
         data = {
+            "chat_history": [entry.model_dump() for entry in session.chat_history],
             "question_id": session.question_id,
             "learner_state": session.learner_state.model_dump(),
             "history": [entry.model_dump() for entry in session.history],

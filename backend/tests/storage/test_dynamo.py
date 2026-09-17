@@ -8,7 +8,7 @@ import unittest
 
 from backend.app.storage.dynamo import DynamoStore
 from backend.app.storage.memory import Session
-from contracts.models import HistoryEntry, LearnerState, SkillState
+from contracts.models import ChatExchange, HistoryEntry, LearnerState, SkillState
 
 
 class FakeTable:
@@ -36,6 +36,18 @@ class DynamoStoreTests(unittest.TestCase):
         self.assertEqual(loaded.learner_state, state)
         self.assertEqual(loaded.history, [])
 
+    def test_chat_round_trip_and_legacy_default(self):
+        sid = self.store.new_session("q1", LearnerState(skills={}))
+        session = self.store.load_session(sid)
+        session.chat_history = [ChatExchange(message="Explain", text="Study notes", teaching_source="authored")]
+        self.store.save_session(sid, session)
+        self.assertEqual(self.store.load_session(sid).chat_history, session.chat_history)
+        item = self.store._table.items[sid]
+        data = json.loads(item["data"])
+        del data["chat_history"]
+        item["data"] = json.dumps(data)
+        self.assertEqual(self.store.load_session(sid).chat_history, [])
+
     def test_anonymous_session_has_no_user_id(self):
         session_id = self.store.new_session("q1", LearnerState(skills={}))
         self.assertIsNone(self.store.load_session(session_id).user_id)
@@ -52,7 +64,7 @@ class DynamoStoreTests(unittest.TestCase):
         self.assertEqual(self.store.load_session(session_id).course_id, "course-1")
         data = json.loads(self.store._table.items[session_id]["data"])
         self.assertEqual(set(data), {"question_id", "learner_state", "history", "user_id", "course_id",
-                                     "remediation_focus", "generated_questions"})
+                                     "remediation_focus", "generated_questions", "chat_history"})
 
     def test_legacy_session_without_course_id_still_loads(self):
         session_id = self.store.new_session("q1", LearnerState(skills={}))

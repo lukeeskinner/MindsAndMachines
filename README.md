@@ -4,6 +4,12 @@
 
 **Uploaded-course integration:** PDF/PPTX uploads can now start course-bound learning sessions through those same seams, using course-specific questions and stored teaching. Concept progression continues until the uploaded study bank is exhausted. See the [integration handoff and manual Grad Algorithms walkthrough](docs/UPLOADED_COURSE_INTEGRATION.md).
 
+The **Chatbot** supports session-scoped follow-up messages grounded in the selected
+course's public study notes. Bedrock mode makes a real bounded call; local mode
+labels its response as local notes. Conversation survives view changes and clears
+on reset/course change. Chat never grades an answer or changes Bayesian evidence.
+See [chat contracts and behavior](docs/CHAT.md).
+
 ## Run locally
 
 The study desk includes **Practice quiz** and **Flashcards**. The demo has eight
